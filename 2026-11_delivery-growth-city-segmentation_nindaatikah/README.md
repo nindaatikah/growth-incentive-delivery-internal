@@ -58,7 +58,17 @@ hover a dot for the detail). Thresholds are `STATUS_RULES` in `src/lib/model.ts`
 | Bolt spend as % of GMV vs the target ratio (relative overspend) | up to +5% | up to +15% | above +15% |
 | GMV YoY | ≥ +10% | ≥ 0% | below 0% |
 
-The same tables (metrics, objectives, thresholds) are in the page, under "Metric and status definitions".
+The same tables (metrics, objectives, thresholds) are in the page, under "Metric, column and status definitions".
+
+#### Column definitions
+| Column | What it shows |
+|---|---|
+| % of GMV (or € with the € switch) | The row's own value: spend divided by the row's own GMV. GMV, CP L1 and CP L2 follow the same switch. |
+| MoM / YoY | Change vs the same days of the previous month / the same month last year (or the full month in run-rate view). Percentage points for % values, relative % for GMV and EUR values. Each month is compared on that month's segments. |
+| vs Target | Actual minus target, in the same unit (pp for % of GMV, relative % for GMV and EUR). Targets come from the budget table, pro-rated for a month in progress. A dash means no target (or a blank budget cell). |
+| % of global GMV | The row's spend divided by the GMV of everything shown (all countries and segments, or the filtered selection). How many points of the total spend rate the row adds, so country rows add up to the TOTAL row. |
+| % of country GMV | The row's spend divided by the GMV of its country (country table only). A country row shows its own spend rate; a segment, city or cluster row shows how many points of its country's rate it adds, so the rows under a country add up to the country row. |
+| Status | Red / yellow / green: the worst of GMV vs target, Bolt spend ratio vs target and GMV YoY. |
 
 #### Targets
 - Budget rows: `aggregation` = `city`, `country` (`GLOBAL` = total) or `segment`. Spend budgets are shares of GMV;
@@ -100,7 +110,7 @@ The same tables (metrics, objectives, thresholds) are in the page, under "Metric
 4. Deploy: create a repo from the Boltable fullstack template, copy `boltable/` into it, set the Portal Secret `DATABRICKS_TOKEN` and the settings `DATABRICKS_HOST` and `DATABRICKS_HTTP_PATH` (an all-purpose cluster), push to main. Optional: `S3_BUCKET` for a snapshot that survives restarts.
 
 ## 7. Boltable details
-- Page: growth-incentive-delivery-internal. Tabs: Monthly (Insights, segment and country tables (the Bolt Spend group also shows % of global GMV and, in the country table, % of country GMV), each split into performance and spend-by-objective), Weekly trend, Daily trend (tables with WoW / DoD, line charts with data labels). Definitions are on the page under "Metric and status definitions".
+- Page: growth-incentive-delivery-internal. Tabs: Monthly (Insights, segment and country tables (the spend groups Bolt Spend, BA, ULC, Activation, Reactivation and Engagement also show % of global GMV and, in the country table, % of country GMV), each split into performance and spend-by-objective), Weekly trend, Daily trend (tables with WoW / DoD, line charts with data labels). Definitions are on the page under "Metric, column and status definitions".
 - Inputs: none from the user except filters (month(s), through-date, same days or run rate, country, city, segment, dates and metric on trend tabs).
 - Access: Bolt SSO behind the NetBird VPN.
 
@@ -140,3 +150,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-04: renaming the Boltable repo broke the app (Boltable ties the app and URL to the repo name), so it was renamed back to growth-incentive-delivery-internal; the URL above is the working one.
 - 2026-11-04: Where the money goes tables: Bolt Spend, Bolt Spend (BA) and ULC as EUR, % of country / segment GMV, % of total GMV and share of total spend.
 - 2026-11-04: Where the money goes tables removed; Bolt Spend shows % of global GMV and % of country GMV inside the performance tables.
+- 2026-11-04: % of global / country GMV for all spend groups; column group lines removed; column definitions added to the page and README.

@@ -364,6 +364,16 @@ export const METRIC_DEFS: { label: string; definition: string; objectives: strin
   { label: "Bolt Plus", definition: "Bolt spend of Bolt Plus campaigns.", objectives: "bolt_plus_campaign, bolt_plus_tested, bolt_plus_untested", source: "etl_delivery_campaign_order_metrics.bolt_spend", target: "bolt_plus (country rows)" },
 ];
 
+/** What each table column means, shown under "Metric and status definitions" (and mirrored in the README). */
+export const COLUMN_DEFS: { column: string; definition: string }[] = [
+  { column: "% of GMV (or € with the € switch)", definition: "The row's own value: spend divided by the row's own GMV. GMV, CP L1 and CP L2 follow the same switch." },
+  { column: "MoM / YoY", definition: "Change vs the same days of the previous month / the same month last year (or the full month in run-rate view). Percentage points for % values, relative % for GMV and EUR values. Each month is compared on that month's segments." },
+  { column: "vs Target", definition: "Actual minus target, in the same unit (pp for % of GMV, relative % for GMV and EUR). Targets come from the budget table, pro-rated for a month in progress. A dash means the row has no target (or the budget cell is blank)." },
+  { column: "% of global GMV", definition: "The row's spend divided by the GMV of everything shown (all countries and segments, or the filtered selection). It is how many points of the total spend rate the row adds, so country rows add up to the TOTAL row." },
+  { column: "% of country GMV", definition: "The row's spend divided by the GMV of its country (country table only). A country row shows its own spend rate; a segment, city or cluster row shows how many points of its country's rate it adds, so the rows under a country add up to the country row." },
+  { column: "Status", definition: "Red / yellow / green: the worst of GMV vs target, Bolt spend ratio vs target and GMV YoY (thresholds below)." },
+];
+
 // ---------- status (red / yellow / green) ----------
 export type Light = "green" | "yellow" | "red";
 /** Thresholds in one place; the page prints them under the Insights box. */

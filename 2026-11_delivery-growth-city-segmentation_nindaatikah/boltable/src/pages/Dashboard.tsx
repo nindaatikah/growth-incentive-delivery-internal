@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Typography } from "@bolteu/clay-react";
 import {
-  METRICS, PERF_METRICS, SPEND_METRICS, METRIC_DEFS, Agg, AggKey, Filters, Level, MetricKey, Node, Payload, SegIndex, TargetMode, TargetSet, Unit, UnitMeta,
+  METRICS, PERF_METRICS, SPEND_METRICS, METRIC_DEFS, COLUMN_DEFS, Agg, Filters, Level, MetricKey, Node, Payload, SegIndex, TargetMode, TargetSet, Unit, UnitMeta,
   activeUnits, addDays, aggregateInto, buildTree, change, daysInMonth, emptyTargets, fmtDelta, fmtValue, metricDef,
   Light, STATUS_RULES, Signal, Status, rowStatus,
-  metricValue, mondayOf, monthEnd, nodeTarget, noFilters, prevMonth, SEGMENT_ORDER, shiftYear, sumIdx, targetValue, targetsInto,
+  metricValue, mondayOf, monthEnd, nodeTarget, noFilters, prevMonth, rawValue, SEGMENT_ORDER, shiftYear, sumIdx, targetValue, targetsInto,
 } from "../lib/model";
 
 type Tab = "monthly" | "weekly" | "daily";
@@ -123,6 +123,8 @@ function trendTone(v: number | null, k: MetricKey): string | undefined {
   return (v > 0) === upIsGood ? "var(--color-content-positive-primary)" : "var(--color-content-danger-primary)";
 }
 
+// Spend metrics that also get "% of global GMV" (and, in country tables, "% of country GMV").
+const SHARE_METRICS: MetricKey[] = ["bolt", "ba", "ulc", "act", "react", "eng"];
 const pct2 = (v: number | null) => (v == null || !isFinite(v) ? "–" : `${(v * 100).toFixed(2)}%`);
 
 // ---------- status + insights ----------
@@ -284,7 +286,7 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
   countryShare?: boolean;
 }) {
   const cols = metrics.map(metricDef);
-  // Bolt spend is also shown as a share of total (global) GMV and, in country tables, of the row's country GMV.
+  // Spend columns are also shown as a share of total (global) GMV and, in country tables, of the row's country GMV.
   const total = sumIdx(m.cur, tree.units);
   const countryOf = new Map<string, Node>();
   const walk = (n: Node, inherited: Node | null) => {
@@ -293,7 +295,7 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
     n.children.forEach((k) => walk(k, c));
   };
   walk(tree, null);
-  const shareCols = (k: MetricKey) => (k === "bolt" ? (countryShare ? 2 : 1) : 0);
+  const shareCols = (k: MetricKey) => (SHARE_METRICS.includes(k) ? (countryShare ? 2 : 1) : 0);
   const { open, toggle, expandAll, collapse } = useOpen(initialOpen);
   const rows = visibleRows(tree, open);
   const valueHead = (k: MetricKey) => (k === "gmv" ? "GMV (€)" : unit === "pct" ? "% of GMV" : "€");
@@ -307,17 +309,17 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
           <th style={{ ...th, textAlign: "left", left: 0, zIndex: 3 }} rowSpan={2}>{firstCol}</th>
           <th style={{ ...th, textAlign: "center", top: 0 }} rowSpan={2} title="Worst of GMV vs target, Bolt spend vs target and GMV YoY">Status</th>
           {cols.map((x) => (
-            <th key={x.key} colSpan={(x.hasTarget ? 4 : 3) + shareCols(x.key)} style={{ ...th, textAlign: "center", borderLeft: border }}>{x.label}</th>
+            <th key={x.key} colSpan={(x.hasTarget ? 4 : 3) + shareCols(x.key)} style={{ ...th, textAlign: "center" }}>{x.label}</th>
           ))}
         </tr>
         <tr>
           {cols.map((x) => [
-            <th key={x.key + "v"} style={{ ...th, top: 31, borderLeft: border }}>{valueHead(x.key)}</th>,
+            <th key={x.key + "v"} style={{ ...th, top: 31 }}>{valueHead(x.key)}</th>,
             <th key={x.key + "m"} style={{ ...th, top: 31 }}>MoM</th>,
             <th key={x.key + "y"} style={{ ...th, top: 31 }}>YoY</th>,
             x.hasTarget ? <th key={x.key + "t"} style={{ ...th, top: 31 }}>vs Target</th> : null,
-            shareCols(x.key) > 0 ? <th key={x.key + "g"} style={{ ...th, top: 31, borderLeft: border }} title="Bolt spend divided by the GMV of everything shown (all countries unless filtered)">% of global GMV</th> : null,
-            shareCols(x.key) > 1 ? <th key={x.key + "c"} style={{ ...th, top: 31 }} title="Bolt spend divided by the GMV of the row's country: a city row shows what it adds to its country's rate">% of country GMV</th> : null,
+            shareCols(x.key) > 0 ? <th key={x.key + "g"} style={{ ...th, top: 31 }} title="Spend divided by the GMV of everything shown (all countries unless filtered)">% of global GMV</th> : null,
+            shareCols(x.key) > 1 ? <th key={x.key + "c"} style={{ ...th, top: 31 }} title="Spend divided by the GMV of the row's country: a city row shows what it adds to its country's rate">% of country GMV</th> : null,
           ])}
         </tr>
       </thead>
@@ -338,12 +340,12 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
                 const tv = x.hasTarget ? targetValue(tgt, x.key, unit) : null;
                 const dt = change(v, tv, x.key, unit);
                 return [
-                  <td key={x.key + "v"} style={{ ...td, borderLeft: border }}>{fmtValue(v, x.key, unit)}</td>,
+                  <td key={x.key + "v"} style={{ ...td }}>{fmtValue(v, x.key, unit)}</td>,
                   <td key={x.key + "m"} style={{ ...td, color: tone(dm, x.key, "delta") }}>{fmtDelta(dm, x.key, unit)}</td>,
                   <td key={x.key + "y"} style={{ ...td, color: tone(dy, x.key, "delta") }}>{fmtDelta(dy, x.key, unit)}</td>,
                   x.hasTarget ? <td key={x.key + "t"} style={{ ...td, color: tone(dt, x.key, "target") }}>{fmtDelta(dt, x.key, unit)}</td> : null,
-                  shareCols(x.key) > 0 ? <td key={x.key + "g"} style={{ ...td, borderLeft: border }}>{pct2(total.gmv > 0 ? cur[x.key as AggKey] / total.gmv : null)}</td> : null,
-                  shareCols(x.key) > 1 ? <td key={x.key + "c"} style={td}>{pct2(countryGmv > 0 ? cur[x.key as AggKey] / countryGmv : null)}</td> : null,
+                  shareCols(x.key) > 0 ? <td key={x.key + "g"} style={{ ...td }}>{pct2(total.gmv > 0 ? rawValue(cur, x.key) / total.gmv : null)}</td> : null,
+                  shareCols(x.key) > 1 ? <td key={x.key + "c"} style={td}>{pct2(countryGmv > 0 ? rawValue(cur, x.key) / countryGmv : null)}</td> : null,
                 ];
               })}
             </tr>
@@ -786,7 +788,7 @@ export default function Dashboard() {
           )}
 
           <details style={{ border, borderRadius: 8, padding: 12 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 600 }}>Metric and status definitions</summary>
+            <summary style={{ cursor: "pointer", fontWeight: 600 }}>Metric, column and status definitions</summary>
             <div style={{ overflow: "auto", marginTop: 8, display: "grid", gap: 12 }}>
               <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
@@ -808,6 +810,19 @@ export default function Dashboard() {
                 Spend and GMV: delivered orders, local order date. Spend ratios are % of GMV; targets are ratio × GMV target, pro-rated by elapsed days
                 (full month in run-rate view). Δ for ratios is in percentage points, for GMV and € it is relative %.
               </Typography>
+              <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>{["Column", "What it shows"].map((h) => <th key={h} style={{ ...th, position: "static", textAlign: "left" }}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {COLUMN_DEFS.map((d) => (
+                    <tr key={d.column}>
+                      <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{d.column}</td>
+                      <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 420 }}>{d.definition}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr>{["Status check", "Green", "Yellow", "Red"].map((h) => <th key={h} style={{ ...th, position: "static", textAlign: "left" }}>{h}</th>)}</tr>
