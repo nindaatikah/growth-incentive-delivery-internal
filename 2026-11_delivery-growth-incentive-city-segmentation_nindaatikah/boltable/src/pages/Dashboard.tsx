@@ -23,6 +23,13 @@ function availableMonths(asOf: string): string[] {
   }
   return out.length ? out : [FIRST_MONTH];
 }
+// Sister dashboards (Delivery Growth - Business Overview), linked in the top right corner.
+const SISTER_LINKS: [string, string][] = [
+  ["Business Overview", "https://business-overview.boltable.eu/index.html"],
+  ["City ULC vs Budget", "https://business-overview.boltable.eu/ulc-budget.html"],
+  ["Zone YoY Performance Map", "https://business-overview.boltable.eu/liquidity-zone-yoy-map.html"],
+];
+const linkChip: React.CSSProperties = { padding: "6px 12px", borderRadius: 8, border: "1px solid var(--color-border-separator)", background: "var(--color-layer-surface)", color: "var(--color-content-primary)", textDecoration: "none", whiteSpace: "nowrap", font: "inherit" };
 const MAIN_LEVELS: Level[] = ["country", "segment", "city", "cluster"];
 
 // ---------- shared UI ----------
@@ -665,11 +672,18 @@ export default function Dashboard() {
             {data ? `Data through ${data.asOf} · updated ${new Date(data.generatedAt).toLocaleString()} · targets read ${new Date(data.budgetAt ?? data.generatedAt).toLocaleString()} · refreshes daily` : "Loading from Databricks…"}
           </Typography>
         </div>
+        <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
+          <nav style={{ ...row, justifyContent: "flex-end", gap: 8 }} aria-label="Related dashboards">
+            {SISTER_LINKS.map(([label, href]) => (
+              <a key={href} href={href} target="_blank" rel="noopener noreferrer" style={linkChip}>{label}</a>
+            ))}
+          </nav>
         <div style={row}>
           {refreshing && <span className="text-secondary">{refreshing}</span>}
           <button onClick={refreshTargets} disabled={!data || refreshing === "Refreshing targets…"} style={{ ...control, cursor: "pointer" }}
             title="Re-read the budget table now (otherwise it refreshes daily at 08:00 UTC)">Refresh targets</button>
           <Seg value={unit} onChange={setUnit} options={[["pct", "% of GMV"], ["eur", "€"]]} />
+        </div>
         </div>
       </header>
 

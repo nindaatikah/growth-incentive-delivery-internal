@@ -105,6 +105,8 @@ The same tables (metrics, objectives, thresholds) are in the page, under "Metric
 - Access: Bolt SSO behind the NetBird VPN.
 
 ## 8. Related work
+The top right corner of the page links to the Business Overview dashboards (Business Overview, City ULC vs Budget, Zone YoY Performance Map) at https://business-overview.boltable.eu; see `2026-11_delivery-growth-business-overview_zbhutta`. They are separate apps, so these are links.
+
 Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothing similar found. Terms searched: delivery, incentive, city segmentation, capital allocation, budget, Bolt spend, ULC, Boltable.
 
 ## 9. Open questions / next steps
@@ -132,3 +134,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-04: budget re-read on every start (a restart onto a saved snapshot kept old targets); header shows when targets were read; /api/status shows budget row counts.
 - 2026-11-04: daily refresh moved to 08:00 UTC (10:00 Estonia in winter).
 - 2026-11-04: added to growth-incentive-delivery-internal (sanitized copy: no workspace, cluster or sheet identifiers).
+- 2026-11-04: links to the Business Overview dashboards in the top right corner.
