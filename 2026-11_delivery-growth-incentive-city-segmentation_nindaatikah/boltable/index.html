@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Delivery Growth Incentive - City Segmentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap"
+    />
+    <style>
+      /* Alias Google Fonts' "Inter" to the "InterVariable" name used by Kalep tokens. */
+      @font-face {
+        font-family: "InterVariable";
+        src: local("InterVariable"), local("Inter");
+        font-display: swap;
+      }
+    </style>
+    <script>
+      // Set initial theme before React mounts to avoid a light-mode flash.
+      (function () {
+        try {
+          const stored = localStorage.getItem("theme-mode");
+          document.documentElement.dataset.mode =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
