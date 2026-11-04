@@ -65,7 +65,7 @@ Gotcha: a date filter written as a subquery on `int_user_metrics_user_cohort` do
 - Inputs: filters only (country, city, segment, objective, vertical, date, cost share). No user-entered data.
 
 ## 8. Related work
-`2026-11_delivery-growth-incentive-city-segmentation_nindaatikah` is the capital-allocation view of incentive spend against budget, with status and month/week/day trends. This folder is the operating dashboard: scorecards, cohorts, the city ULC rate against the November country target, and the zone map. The two do not share a page.
+`2026-11_delivery-growth-city-segmentation_nindaatikah` is the capital-allocation view of incentive spend against budget, with status and month/week/day trends. This folder is the operating dashboard: scorecards, cohorts, the city ULC rate against the November country target, and the zone map. The two do not share a page.
 
 ## 9. Open questions / next steps
 - Daily cohort chart still ends on 13 October until `08_cohort_daily_metrics.sql` is rerun. The query is updated so the cohort-table predicate prunes.

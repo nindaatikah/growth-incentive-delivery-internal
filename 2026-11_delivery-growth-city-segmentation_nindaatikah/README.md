@@ -5,7 +5,7 @@
 | Owner | nindaatikah |
 | Date (created / last updated) | 2026-11-03 / 2026-11-04 |
 | Status | live |
-| Boltable page | delivery-growth-incentive-internal, https://delivery-growth-incentive-internal.boltable.eu (internal: VPN + SSO; renamed from growth-incentive-delivery-internal on 2026-11-04) |
+| Boltable page | delivery-growth-city-segmentation, https://delivery-growth-city-segmentation.boltable.eu (internal: VPN + SSO; renamed twice on 2026-11-04, earlier names no longer work) |
 | Stakeholders / requested by | Delivery growth and incentives team |
 | Region / vertical | Delivery (Food and Market) in all European markets plus Ghana and Kenya; Georgia, Tuvalu and Croatia excluded |
 | Keywords | delivery growth incentive, city segmentation, capital allocation, budget vs actual, Bolt spend, ULC, activation, reactivation, engagement, ELC, AM, BDM 3P, 1P, Bolt Plus, CP L1, CP L2, contribution profit, WoW, DoD, YoY, run rate, red yellow green status, dim_order_delivery, etl_delivery_campaign_order_metrics, delivery_budget_capital_allocation, Boltable |
@@ -100,7 +100,7 @@ The same tables (metrics, objectives, thresholds) are in the page, under "Metric
 4. Deploy: create a repo from the Boltable fullstack template, copy `boltable/` into it, set the Portal Secret `DATABRICKS_TOKEN` and the settings `DATABRICKS_HOST` and `DATABRICKS_HTTP_PATH` (an all-purpose cluster), push to main. Optional: `S3_BUCKET` for a snapshot that survives restarts.
 
 ## 7. Boltable details
-- Page: delivery-growth-incentive-internal. Tabs: Monthly (Insights, segment and country tables, each split into performance and spend-by-objective), Weekly trend, Daily trend (tables with WoW / DoD, line charts with data labels). Definitions are on the page under "Metric and status definitions".
+- Page: delivery-growth-city-segmentation. Tabs: Monthly (Insights, segment and country tables, each split into performance and spend-by-objective), Weekly trend, Daily trend (tables with WoW / DoD, line charts with data labels). Definitions are on the page under "Metric and status definitions".
 - Inputs: none from the user except filters (month(s), through-date, same days or run rate, country, city, segment, dates and metric on trend tabs).
 - Access: Bolt SSO behind the NetBird VPN.
 
@@ -136,3 +136,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-04: added to growth-incentive-delivery-internal (sanitized copy: no workspace, cluster or sheet identifiers).
 - 2026-11-04: links to the Business Overview dashboards in the top right corner.
 - 2026-11-04: Boltable app renamed to delivery-growth-incentive-internal (new URL: https://delivery-growth-incentive-internal.boltable.eu).
+- 2026-11-04: Boltable app renamed to delivery-growth-city-segmentation (https://delivery-growth-city-segmentation.boltable.eu); this folder renamed from 2026-11_delivery-growth-incentive-city-segmentation_nindaatikah.
