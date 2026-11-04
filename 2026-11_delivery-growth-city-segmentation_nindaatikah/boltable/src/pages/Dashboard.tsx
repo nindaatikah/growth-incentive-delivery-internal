@@ -4,7 +4,7 @@ import {
   METRICS, PERF_METRICS, SPEND_METRICS, METRIC_DEFS, Agg, Filters, Level, MetricKey, Node, Payload, SegIndex, TargetMode, TargetSet, Unit, UnitMeta,
   activeUnits, addDays, aggregateInto, buildTree, change, daysInMonth, emptyTargets, fmtDelta, fmtValue, metricDef,
   Light, STATUS_RULES, Signal, Status, rowStatus,
-  metricValue, mondayOf, monthEnd, nodeTarget, noFilters, prevMonth, SEGMENT_ORDER, shiftYear, sumIdx, targetValue, targetsInto,
+  metricValue, mondayOf, monthEnd, nodeTarget, noFilters, prevMonth, rawValue, SEGMENT_ORDER, shiftYear, sumIdx, targetValue, targetsInto,
 } from "../lib/model";
 
 type Tab = "monthly" | "weekly" | "daily";
@@ -30,6 +30,7 @@ const SISTER_LINKS: [string, string][] = [
   ["Zone YoY Performance Map", "https://business-overview.boltable.eu/liquidity-zone-yoy-map.html"],
 ];
 const linkChip: React.CSSProperties = { padding: "6px 12px", borderRadius: 8, border: "1px solid var(--color-border-separator)", background: "var(--color-layer-surface)", color: "var(--color-content-primary)", textDecoration: "none", whiteSpace: "nowrap", font: "inherit" };
+const COUNTRY_LEVELS: Level[] = ["country", "city"];
 const MAIN_LEVELS: Level[] = ["country", "segment", "city", "cluster"];
 
 // ---------- shared UI ----------
@@ -325,6 +326,77 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
                   <td key={x.key + "m"} style={{ ...td, color: tone(dm, x.key, "delta") }}>{fmtDelta(dm, x.key, unit)}</td>,
                   <td key={x.key + "y"} style={{ ...td, color: tone(dy, x.key, "delta") }}>{fmtDelta(dy, x.key, unit)}</td>,
                   x.hasTarget ? <td key={x.key + "t"} style={{ ...td, color: tone(dt, x.key, "target") }}>{fmtDelta(dt, x.key, unit)}</td> : null,
+                ];
+              })}
+            </tr>
+          );
+        })}
+      </tbody>
+    </TableShell>
+  );
+}
+
+// ---------- where the money goes: spend as % of country / segment GMV and of total GMV ----------
+const MONEY_METRICS: MetricKey[] = ["bolt", "ba", "ulc"];
+const pct2 = (v: number | null) => (v == null || !isFinite(v) ? "–" : `${(v * 100).toFixed(2)}%`);
+
+/**
+ * For each row: spend in EUR; % of the GMV of its country (segment table: of its segment), which for a country row is
+ * its own spend rate and for a city row is the city's contribution to it; % of total GMV (the contribution to the total
+ * rate); and the share of all spend. Contributions add up: cities to their country, countries to the total.
+ */
+function MoneyTable({ title, firstCol, tree, m, scope, initialOpen }: {
+  title: string; firstCol: string; tree: Node; m: MonthModel; scope: "country" | "segment"; initialOpen: string[];
+}) {
+  const { open, toggle, expandAll, collapse } = useOpen(initialOpen);
+  const rows = visibleRows(tree, open);
+  const total = sumIdx(m.cur, tree.units);
+  const anchorOf = new Map<string, Node>();
+  const walk = (n: Node, inherited: Node) => {
+    const a = n.level === "total" || n.level === "country" || scope === "segment" ? n : inherited;
+    anchorOf.set(n.id, a);
+    n.children.forEach((c) => walk(c, a));
+  };
+  walk(tree, tree);
+  const ownName = scope === "country" ? "country" : "segment";
+  return (
+    <TableShell title={title} actions={<>
+      <button onClick={collapse} style={linkBtn}>Collapse</button>
+      <button onClick={() => expandAll(tree)} style={linkBtn}>Expand all</button>
+    </>}>
+      <thead>
+        <tr>
+          <th style={{ ...th, textAlign: "left", left: 0, zIndex: 3 }} rowSpan={2}>{firstCol}</th>
+          <th colSpan={2} style={{ ...th, textAlign: "center", borderLeft: border }}>GMV</th>
+          {MONEY_METRICS.map((k) => <th key={k} colSpan={4} style={{ ...th, textAlign: "center", borderLeft: border }}>{metricDef(k).label}</th>)}
+        </tr>
+        <tr>
+          <th style={{ ...th, top: 31, borderLeft: border }}>€</th>
+          <th style={{ ...th, top: 31 }}>% of total GMV</th>
+          {MONEY_METRICS.map((k) => [
+            <th key={k + "e"} style={{ ...th, top: 31, borderLeft: border }}>€</th>,
+            <th key={k + "o"} style={{ ...th, top: 31 }}>% of {ownName} GMV</th>,
+            <th key={k + "t"} style={{ ...th, top: 31 }}>% of total GMV</th>,
+            <th key={k + "s"} style={{ ...th, top: 31 }}>Share of total spend</th>,
+          ])}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((n) => {
+          const cur = sumIdx(m.cur, n.units);
+          const own = sumIdx(m.cur, anchorOf.get(n.id)!.units).gmv;
+          return (
+            <tr key={n.id} style={{ background: n.depth === 0 ? "var(--color-layer-floor-1)" : undefined }}>
+              <Label n={n} open={open} toggle={toggle} />
+              <td style={{ ...td, borderLeft: border }}>{fmtValue(cur.gmv, "gmv", "eur")}</td>
+              <td style={td}>{pct2(total.gmv > 0 ? cur.gmv / total.gmv : null)}</td>
+              {MONEY_METRICS.map((k) => {
+                const v = rawValue(cur, k), tv = rawValue(total, k);
+                return [
+                  <td key={k + "e"} style={{ ...td, borderLeft: border }}>{fmtValue(v, "gmv", "eur")}</td>,
+                  <td key={k + "o"} style={td}>{pct2(own > 0 ? v / own : null)}</td>,
+                  <td key={k + "t"} style={td}>{pct2(total.gmv > 0 ? v / total.gmv : null)}</td>,
+                  <td key={k + "s"} style={td}>{pct2(tv > 0 ? v / tv : null)}</td>,
                 ];
               })}
             </tr>
@@ -660,6 +732,7 @@ export default function Dashboard() {
 
   const globalSeg = useMemo(() => buildTree(meta, active, ["segment"], "GLOBAL"), [meta, active]);
   const mainTree = useMemo(() => buildTree(meta, active, MAIN_LEVELS), [meta, active]);
+  const countryTree = useMemo(() => buildTree(meta, active, COUNTRY_LEVELS), [meta, active]);
 
   const monthLabel = (m: string) => new Date(m + "-01T00:00:00Z").toLocaleString("en", { month: "long", year: "numeric", timeZone: "UTC" });
 
@@ -747,6 +820,15 @@ export default function Dashboard() {
 
           {active.length > 0 && mm && tab === "monthly" && (
             <>
+              <MoneyTable key="mc" title="Where the money goes: by country" firstCol="Country / City" tree={countryTree} m={mm.m} scope="country" initialOpen={["total"]} />
+              <MoneyTable key="ms" title="Where the money goes: by segment" firstCol="Segment" tree={globalSeg} m={mm.m} scope="segment" initialOpen={["total"]} />
+              <Typography className="bolt-font-body-s-regular text-secondary">
+                How to read the two tables above: <b>% of country GMV</b> = the row's spend divided by the GMV of its country. A country row shows its own spend rate;
+                a city row shows how much of that rate the city adds (cities add up to the country). <b>% of total GMV</b> = spend divided by the GMV of everything
+                selected (all countries unless you filter), so it shows how much each country or segment adds to the total rate (rows add up to TOTAL).
+                In the segment table the first percentage is of the segment's own GMV. <b>Share of total spend</b> = the row's spend divided by total spend.
+                Spend is Bolt spend (GA, incl. VAT), Bolt spend (BA) and ULC (activation + reactivation + engagement).
+              </Typography>
               <MetricTable key="g" title="Global performance by segment" firstCol="Segment" tree={globalSeg} m={mm.m} unit={unit} initialOpen={["total"]}
                 metrics={PERF_METRICS} mode="segment" filters={filters} />
               <MetricTable key="gs" title="Global spend by objective, by segment" firstCol="Segment" tree={globalSeg} m={mm.m} unit={unit} initialOpen={["total"]}

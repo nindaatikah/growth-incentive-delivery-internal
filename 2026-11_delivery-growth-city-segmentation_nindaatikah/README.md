@@ -100,7 +100,7 @@ The same tables (metrics, objectives, thresholds) are in the page, under "Metric
 4. Deploy: create a repo from the Boltable fullstack template, copy `boltable/` into it, set the Portal Secret `DATABRICKS_TOKEN` and the settings `DATABRICKS_HOST` and `DATABRICKS_HTTP_PATH` (an all-purpose cluster), push to main. Optional: `S3_BUCKET` for a snapshot that survives restarts.
 
 ## 7. Boltable details
-- Page: growth-incentive-delivery-internal. Tabs: Monthly (Insights, segment and country tables, each split into performance and spend-by-objective), Weekly trend, Daily trend (tables with WoW / DoD, line charts with data labels). Definitions are on the page under "Metric and status definitions".
+- Page: growth-incentive-delivery-internal. Tabs: Monthly (Insights, two "Where the money goes" tables (Bolt Spend, BA and ULC as EUR, % of country or segment GMV, % of total GMV and share of total spend), segment and country tables, each split into performance and spend-by-objective), Weekly trend, Daily trend (tables with WoW / DoD, line charts with data labels). Definitions are on the page under "Metric and status definitions".
 - Inputs: none from the user except filters (month(s), through-date, same days or run rate, country, city, segment, dates and metric on trend tabs).
 - Access: Bolt SSO behind the NetBird VPN.
 
@@ -138,3 +138,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-04: Boltable app renamed to delivery-growth-incentive-internal (new URL: https://delivery-growth-incentive-internal.boltable.eu).
 - 2026-11-04: Boltable app renamed to delivery-growth-city-segmentation (https://delivery-growth-city-segmentation.boltable.eu); this folder renamed from 2026-11_delivery-growth-incentive-city-segmentation_nindaatikah.
 - 2026-11-04: renaming the Boltable repo broke the app (Boltable ties the app and URL to the repo name), so it was renamed back to growth-incentive-delivery-internal; the URL above is the working one.
+- 2026-11-04: Where the money goes tables: Bolt Spend, Bolt Spend (BA) and ULC as EUR, % of country / segment GMV, % of total GMV and share of total spend.
