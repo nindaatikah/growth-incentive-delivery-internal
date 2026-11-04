@@ -151,3 +151,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-04: Where the money goes tables: Bolt Spend, Bolt Spend (BA) and ULC as EUR, % of country / segment GMV, % of total GMV and share of total spend.
 - 2026-11-04: Where the money goes tables removed; Bolt Spend shows % of global GMV and % of country GMV inside the performance tables.
 - 2026-11-04: % of global / country GMV for all spend groups; column group lines removed; column definitions added to the page and README.
+- 2026-11-04: a divider line between metric groups (only between metrics, not inside a group).

@@ -309,12 +309,12 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
           <th style={{ ...th, textAlign: "left", left: 0, zIndex: 3 }} rowSpan={2}>{firstCol}</th>
           <th style={{ ...th, textAlign: "center", top: 0 }} rowSpan={2} title="Worst of GMV vs target, Bolt spend vs target and GMV YoY">Status</th>
           {cols.map((x) => (
-            <th key={x.key} colSpan={(x.hasTarget ? 4 : 3) + shareCols(x.key)} style={{ ...th, textAlign: "center" }}>{x.label}</th>
+            <th key={x.key} colSpan={(x.hasTarget ? 4 : 3) + shareCols(x.key)} style={{ ...th, textAlign: "center", borderLeft: border }}>{x.label}</th>
           ))}
         </tr>
         <tr>
           {cols.map((x) => [
-            <th key={x.key + "v"} style={{ ...th, top: 31 }}>{valueHead(x.key)}</th>,
+            <th key={x.key + "v"} style={{ ...th, top: 31, borderLeft: border }}>{valueHead(x.key)}</th>,
             <th key={x.key + "m"} style={{ ...th, top: 31 }}>MoM</th>,
             <th key={x.key + "y"} style={{ ...th, top: 31 }}>YoY</th>,
             x.hasTarget ? <th key={x.key + "t"} style={{ ...th, top: 31 }}>vs Target</th> : null,
@@ -340,7 +340,7 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
                 const tv = x.hasTarget ? targetValue(tgt, x.key, unit) : null;
                 const dt = change(v, tv, x.key, unit);
                 return [
-                  <td key={x.key + "v"} style={{ ...td }}>{fmtValue(v, x.key, unit)}</td>,
+                  <td key={x.key + "v"} style={{ ...td, borderLeft: border }}>{fmtValue(v, x.key, unit)}</td>,
                   <td key={x.key + "m"} style={{ ...td, color: tone(dm, x.key, "delta") }}>{fmtDelta(dm, x.key, unit)}</td>,
                   <td key={x.key + "y"} style={{ ...td, color: tone(dy, x.key, "delta") }}>{fmtDelta(dy, x.key, unit)}</td>,
                   x.hasTarget ? <td key={x.key + "t"} style={{ ...td, color: tone(dt, x.key, "target") }}>{fmtDelta(dt, x.key, unit)}</td> : null,
