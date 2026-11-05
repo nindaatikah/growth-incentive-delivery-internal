@@ -51,7 +51,8 @@ const REFRESH_HOUR_UTC = Number(process.env.REFRESH_HOUR_UTC ?? 8);
 const EXCLUDED_COUNTRIES = new Set(["Georgia", "Tuvalu", "Croatia"]);
 // Late spend and cancellations can still change the last few days, so each refresh re-reads them.
 const RELOAD_DAYS = 3;
-const RECENT_START = "2026-09-01";
+// Far enough back for the weekly default (last 12 weeks, plus the week before for WoW) at any date from now on.
+const RECENT_START = "2026-07-01";
 // Last year's data (for YoY) starts here and runs up to the end of this month one year ago.
 const HISTORY_START = "2025-10-01";
 /** Exclusive end of the history window: the 1st of next month, one year back. */
@@ -61,7 +62,7 @@ function historyEnd(now = new Date()) {
 
 // Raw query results. History (last year's months) never changes; recent is refreshed incrementally.
 // Bump when the row shape changes, so an old S3 snapshot is ignored instead of misread.
-const STATE_VERSION = 6; // 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
+const STATE_VERSION = 7; // 7: history window starts 2026-07-01 (12-week default); 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
 type State = { version: number; at: string; hist: Row[]; histTo?: string; recent: Row[]; budget: Row[]; budgetAt?: string };
 let state: State | null = null;
 let payload: unknown = null;

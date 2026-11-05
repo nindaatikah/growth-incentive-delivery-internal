@@ -11,7 +11,8 @@ type Tab = "monthly" | "weekly" | "daily";
 type Basis = "same" | "run";
 // First month offered; later months appear automatically as data arrives.
 const FIRST_MONTH = "2026-10";
-const TREND_START = "2026-10-01";
+// Earliest day the trend tabs can show (the server loads recent data from here).
+const TREND_MIN = "2026-07-01";
 
 /** Months from FIRST_MONTH to the month of the latest data day, newest first. */
 function availableMonths(asOf: string): string[] {
@@ -590,7 +591,8 @@ export default function Dashboard() {
   const [pickedMonths, setMonths] = useState<string[] | null>(null);
   const [through, setThrough] = useState<Record<string, string>>({});
   const [basis, setBasis] = useState<Basis>("same");
-  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  // Date range per trend tab; null = that tab's default.
+  const [ranges, setRanges] = useState<Record<"weekly" | "daily", { from: string; to: string } | null>>({ weekly: null, daily: null });
   const [metric, setMetric] = useState<MetricKey>("gmv");
   // Daily trend: compare with the day before (DoD) or the same weekday last week (WoW).
   const [dayShift, setDayShift] = useState<1 | 7>(1);
@@ -661,8 +663,14 @@ export default function Dashboard() {
   // Monthly tab: months + (for a single month) a "through" date, default the latest day.
   const monthMax = single ? (asOf && asOf < monthEnd(single) ? asOf : monthEnd(single)) : "";
   const throughDay = single ? (through[single] && through[single] <= monthMax ? through[single] : monthMax) : null;
-  // Weekly / Daily tabs: date range (defaults to Oct 1 → latest day).
-  const from = range?.from ?? TREND_START, to = range?.to && range.to <= asOf ? range.to : asOf;
+  // Weekly / Daily tabs: date range. Defaults: daily = the 1st of the month of the latest data day;
+  // weekly = the last 12 weeks (Monday-based, including the current week), up to the latest day.
+  const trendTab = tab === "weekly" ? "weekly" : "daily";
+  const range = ranges[trendTab];
+  const defaultFrom = !asOf ? TREND_MIN : trendTab === "weekly" ? addDays(mondayOf(asOf), -77) : `${asOf.slice(0, 7)}-01`;
+  const to = range?.to && range.to <= asOf ? range.to : asOf;
+  const from = range?.from ?? (defaultFrom < TREND_MIN ? TREND_MIN : defaultFrom);
+  const setRange = (r: { from: string; to: string }) => setRanges({ ...ranges, [trendTab]: r });
 
   const isMonthly = tab === "monthly";
   const mm = useMemo(() => (data && isMonthly ? monthModel(data, selMonths, throughDay, basis, asOf) : null),
@@ -734,7 +742,7 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <DateInput label="From" value={from} min={TREND_START} max={to} onChange={(v) => setRange({ from: v, to })} />
+                <DateInput label="From" value={from} min={TREND_MIN} max={to} onChange={(v) => setRange({ from: v, to })} />
                 <DateInput label="To" value={to} min={from} max={asOf} onChange={(v) => setRange({ from, to: v })} />
                 <select value={metric} onChange={(e) => setMetric(e.target.value as MetricKey)} style={control}>
                   {METRICS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
