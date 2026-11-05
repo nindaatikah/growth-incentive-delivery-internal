@@ -1,5 +1,8 @@
 import { Router } from "express";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import { promisify } from "node:util";
+import { gzip } from "node:zlib";
 import path from "node:path";
 import { runQuery as realQuery } from "../lib/databricks.js";
 import { mockQuery } from "../lib/mock.js";
@@ -66,6 +69,17 @@ const STATE_VERSION = 8; // 8: history window starts 2025-07-01 (YoY on the tren
 type State = { version: number; at: string; hist: Row[]; histTo?: string; recent: Row[]; budget: Row[]; budgetAt?: string };
 let state: State | null = null;
 let payload: unknown = null;
+// The payload is big. It is serialised and compressed once per refresh (not per page load) and served with an
+// ETag, so a repeat visit with unchanged data is a 304 with no body.
+let payloadHttp: { etag: string; json: Buffer; gz: Buffer } | null = null;
+async function setPayload(p: unknown) {
+  payload = p;
+  const json = Buffer.from(JSON.stringify(p));
+  const gz = await promisify(gzip)(json, { level: 6 });
+  if (payload !== p) return; // a newer payload was set meanwhile
+  payloadHttp = { etag: `"${crypto.createHash("sha1").update(gz).digest("hex").slice(0, 20)}"`, json, gz };
+  console.log(`payload ready: ${(json.length / 1e6).toFixed(1)} MB, ${(gz.length / 1e6).toFixed(1)} MB gzipped`);
+}
 let inflight: Promise<void> | null = null;
 let loadingSince: number | null = null;
 let lastError: { at: number; message: string } | null = null;
@@ -119,6 +133,8 @@ function buildPayload(s: State) {
 
   const rows = [...s.hist, ...s.recent]
     .filter((r) => !EXCLUDED_COUNTRIES.has(r.country_name!))
+    // Unit-days with nothing in them add nothing to any sum: leave them out to keep the payload small.
+    .filter((r) => ROW_FIELDS.some((f) => num(r[f]) !== 0))
     .map((r) => [
       r.day,
       unitIdx(cityIdx(r.country_name!, r.city_name!), r.zone_cluster ?? "Unclustered"),
@@ -196,7 +212,7 @@ function refresh() {
   inflight = load(state)
     .then(async (s) => {
       state = s;
-      payload = buildPayload(s);
+      await setPayload(buildPayload(s));
       lastError = null;
       await writeSnapshot(s);
     })
@@ -209,7 +225,19 @@ function refresh() {
 }
 
 // Page loads never wait for Databricks: they get whatever is loaded, and refreshes run on a timer.
-dataRouter.get("/api/data", (_req, res) => {
+dataRouter.get("/api/data", (req, res) => {
+  if (payloadHttp) {
+    res.setHeader("ETag", payloadHttp.etag);
+    res.setHeader("Cache-Control", "no-cache"); // always ask, but a matching ETag answers 304
+    res.setHeader("Vary", "Accept-Encoding");
+    res.type("application/json");
+    if (req.headers["if-none-match"] === payloadHttp.etag) return res.status(304).end();
+    if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) {
+      res.setHeader("Content-Encoding", "gzip");
+      return res.send(payloadHttp.gz);
+    }
+    return res.send(payloadHttp.json);
+  }
   if (payload) return res.json(payload);
   if (lastError && !inflight) {
     if (Date.now() - lastError.at > 30_000) refresh(); // retry, but not on every poll
@@ -246,7 +274,7 @@ async function reloadBudget(label: string) {
   if (!state) throw new Error("Data is still loading");
   const budget = await runQuery(label, readSql("budget.sql"));
   state = { ...state, budget, budgetAt: new Date().toISOString() };
-  payload = buildPayload(state);
+  await setPayload(buildPayload(state));
   void writeSnapshot(state);
   return budget;
 }
@@ -280,7 +308,7 @@ async function start() {
   const snap = await readSnapshot<State>();
   if (snap?.version === STATE_VERSION) {
     state = snap;
-    payload = buildPayload(snap);
+    await setPayload(buildPayload(snap));
     console.log(`served snapshot from ${snap.at}`);
   }
   // Skip the big startup query when the snapshot already has today's refresh, but always re-read the budget

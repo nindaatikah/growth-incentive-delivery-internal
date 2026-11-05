@@ -545,13 +545,13 @@ function trendPeriods(grain: "weekly" | "daily", from: string, to: string, asOf:
 }
 
 /** What each period is compared with. */
-type Cmp = "dod" | "wow" | "mom" | "yoy";
-const CMP_NAME: Record<Cmp, string> = { dod: "DoD", wow: "WoW", mom: "vs last month", yoy: "YoY" };
+type Cmp = "dod" | "wow" | "d28" | "yoy";
+const CMP_NAME: Record<Cmp, string> = { dod: "DoD", wow: "WoW", d28: "vs 28 days ago", yoy: "YoY" };
 const CMP_LABEL: Record<"weekly" | "daily", Partial<Record<Cmp, string>>> = {
   weekly: { wow: "change vs the same days of the week before (WoW)", yoy: "change vs the same week last year, 52 weeks earlier (YoY)" },
   daily: {
     dod: "change vs the day before (DoD)", wow: "change vs the same weekday last week (WoW)",
-    mom: "change vs the same date last month (MoM)", yoy: "change vs the same date last year (YoY)",
+    d28: "change vs the same weekday 28 days (4 weeks) earlier", yoy: "change vs the same date last year (YoY)",
   },
 };
 
@@ -560,8 +560,9 @@ function compareWindow(q: Period, cmp: Cmp, grain: "weekly" | "daily") {
   const days = (n: number) => ({ from: addDays(q.from, -n), to: addDays(q.to, -n) });
   if (cmp === "dod") return days(1);
   if (cmp === "wow") return days(7);
+  if (cmp === "d28") return days(28);
   if (cmp === "yoy") return grain === "weekly" ? days(364) : { from: sameDayShift(q.from, -12), to: sameDayShift(q.to, -12) };
-  return { from: sameDayShift(q.from, -1), to: sameDayShift(q.to, -1) };
+  return days(1);
 }
 
 /**
@@ -615,7 +616,7 @@ export default function Dashboard() {
   const [ranges, setRanges] = useState<Record<"weekly" | "daily", { from: string; to: string } | null>>({ weekly: null, daily: null });
   const [metric, setMetric] = useState<MetricKey>("gmv");
   // Daily trend: compare with the day before (DoD) or the same weekday last week (WoW).
-  // Comparison per trend tab: daily = DoD / WoW / vs last month / YoY, weekly = WoW / YoY.
+  // Comparison per trend tab: daily = DoD / WoW / vs 28 days ago / YoY, weekly = WoW / YoY.
   const [cmps, setCmps] = useState<{ weekly: Cmp; daily: Cmp }>({ weekly: "wow", daily: "dod" });
   const [refreshing, setRefreshing] = useState("");
 
@@ -765,7 +766,7 @@ export default function Dashboard() {
               <>
                 <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>Compare
                   <Seg value={cmp} onChange={(v) => setCmps({ ...cmps, [trendTab]: v })}
-                    options={(trendTab === "weekly" ? [["wow", "WoW"], ["yoy", "YoY"]] : [["dod", "DoD"], ["wow", "WoW"], ["mom", "vs last month"], ["yoy", "YoY"]]) as [Cmp, string][]} />
+                    options={(trendTab === "weekly" ? [["wow", "WoW"], ["yoy", "YoY"]] : [["dod", "DoD"], ["wow", "WoW"], ["d28", "vs 28 days ago"], ["yoy", "YoY"]]) as [Cmp, string][]} />
                 </span>
                 <DateInput label="From" value={from} min={TREND_MIN} max={to} onChange={(v) => setRange({ from: v, to })} />
                 <DateInput label="To" value={to} min={from} max={asOf} onChange={(v) => setRange({ from, to: v })} />

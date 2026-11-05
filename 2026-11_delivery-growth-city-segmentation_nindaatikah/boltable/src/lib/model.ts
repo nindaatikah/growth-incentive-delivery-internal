@@ -150,6 +150,14 @@ export class SegIndex {
     return i;
   }
 
+  private maps = new Map<string, number[]>();
+  /** unit index -> segmented unit index, for one month's segments (cached across calls). */
+  unitMap(month: string): number[] {
+    let m = this.maps.get(month);
+    if (!m) { m = []; this.maps.set(month, m); }
+    return m;
+  }
+
   get(unit: number, segment: string) {
     const k = `${unit}|${segment}`;
     let i = this.unitKeys.get(k);
@@ -169,19 +177,39 @@ export class SegIndex {
  * `segMonth` picks whose segment applies: a fixed month, or (default) each day's own month.
  */
 export function aggregateInto(out: Agg[], p: Payload, ix: SegIndex, from: string, to: string, k = 1, segMonth?: string) {
-  const cache = new Map<string, number>();
-  for (const r of p.rows) {
-    if (r[0] < from || r[0] > to) continue;
-    const month = segMonth ?? r[0].slice(0, 7);
-    const ck = `${month}|${r[1]}`;
-    let vu = cache.get(ck);
-    if (vu === undefined) {
-      vu = ix.get(r[1], ix.segment(month, p.units[r[1]][0]));
-      cache.set(ck, vu);
+  // Only the days in [from, to] are visited (rows are indexed by day), not every row.
+  const { rows, days, starts } = dayIndex(p);
+  let lo = 0, hi = days.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (days[mid] < from) lo = mid + 1; else hi = mid; }
+  for (let d = lo; d < days.length && days[d] <= to; d++) {
+    const month = segMonth ?? days[d].slice(0, 7);
+    const map = ix.unitMap(month);
+    for (let i = starts[d]; i < starts[d + 1]; i++) {
+      const r = rows[i];
+      const u = r[1];
+      let vu = map[u];
+      if (vu === undefined) vu = map[u] = ix.get(u, ix.segment(month, p.units[u][0]));
+      const a = (out[vu] ??= emptyAgg());
+      for (let j = 0; j < AGG_KEYS.length; j++) a[AGG_KEYS[j]] += (r[j + 2] as number) * k;
     }
-    const a = (out[vu] ??= emptyAgg());
-    for (let i = 0; i < AGG_KEYS.length; i++) a[AGG_KEYS[i]] += (r[i + 2] as number) * k;
   }
+}
+
+type DayIndex = { rows: Payload["rows"]; days: string[]; starts: number[] };
+const dayIndexCache = new WeakMap<Payload, DayIndex>();
+/** Rows sorted by day, with where each day starts. Built once per payload. */
+function dayIndex(p: Payload): DayIndex {
+  let ix = dayIndexCache.get(p);
+  if (ix) return ix;
+  let sorted = true;
+  for (let i = 1; i < p.rows.length; i++) if (p.rows[i][0] < p.rows[i - 1][0]) { sorted = false; break; }
+  const rows = sorted ? p.rows : [...p.rows].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const days: string[] = [], starts: number[] = [];
+  for (let i = 0; i < rows.length; i++) if (days[days.length - 1] !== rows[i][0]) { days.push(rows[i][0]); starts.push(i); }
+  starts.push(rows.length);
+  ix = { rows, days, starts };
+  dayIndexCache.set(p, ix);
+  return ix;
 }
 
 /**
