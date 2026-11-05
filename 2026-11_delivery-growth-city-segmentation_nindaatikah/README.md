@@ -153,3 +153,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-04: % of global / country GMV for all spend groups; column group lines removed; column definitions added to the page and README.
 - 2026-11-04: a divider line between metric groups (only between metrics, not inside a group).
 - 2026-11-05: Daily trend defaults to the 1st of the ongoing month, Weekly trend to the last 12 weeks (ranges kept per tab); the page shows the error instead of a blank screen if it crashes; the server loads data from 2026-07-01.
+- 2026-11-05: Daily trend can compare with the same date last month and last year; Weekly trend gets a YoY option; history loads from 2025-07-01 for YoY.

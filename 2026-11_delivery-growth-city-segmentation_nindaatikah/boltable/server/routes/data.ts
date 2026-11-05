@@ -54,7 +54,7 @@ const RELOAD_DAYS = 3;
 // Far enough back for the weekly default (last 12 weeks, plus the week before for WoW) at any date from now on.
 const RECENT_START = "2026-07-01";
 // Last year's data (for YoY) starts here and runs up to the end of this month one year ago.
-const HISTORY_START = "2025-10-01";
+const HISTORY_START = "2025-07-01"; // a year before RECENT_START, so YoY works for every day the trend tabs can show
 /** Exclusive end of the history window: the 1st of next month, one year back. */
 function historyEnd(now = new Date()) {
   return new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
@@ -62,7 +62,7 @@ function historyEnd(now = new Date()) {
 
 // Raw query results. History (last year's months) never changes; recent is refreshed incrementally.
 // Bump when the row shape changes, so an old S3 snapshot is ignored instead of misread.
-const STATE_VERSION = 7; // 7: history window starts 2026-07-01 (12-week default); 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
+const STATE_VERSION = 8; // 8: history window starts 2025-07-01 (YoY on the trend tabs); 7: history window starts 2026-07-01 (12-week default); 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
 type State = { version: number; at: string; hist: Row[]; histTo?: string; recent: Row[]; budget: Row[]; budgetAt?: string };
 let state: State | null = null;
 let payload: unknown = null;

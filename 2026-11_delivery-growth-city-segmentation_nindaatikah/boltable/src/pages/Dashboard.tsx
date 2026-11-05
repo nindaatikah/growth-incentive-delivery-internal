@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Typography } from "@bolteu/clay-react";
 import {
   METRICS, PERF_METRICS, SPEND_METRICS, METRIC_DEFS, COLUMN_DEFS, Agg, Filters, Level, MetricKey, Node, Payload, SegIndex, TargetMode, TargetSet, Unit, UnitMeta,
-  activeUnits, addDays, aggregateInto, buildTree, change, daysInMonth, emptyTargets, fmtDelta, fmtValue, metricDef,
+  activeUnits, addDays, sameDayShift, aggregateInto, buildTree, change, daysInMonth, emptyTargets, fmtDelta, fmtValue, metricDef,
   Light, STATUS_RULES, Signal, Status, rowStatus,
   metricValue, mondayOf, monthEnd, nodeTarget, noFilters, prevMonth, rawValue, SEGMENT_ORDER, shiftYear, sumIdx, targetValue, targetsInto,
 } from "../lib/model";
@@ -544,15 +544,35 @@ function trendPeriods(grain: "weekly" | "daily", from: string, to: string, asOf:
   return out;
 }
 
+/** What each period is compared with. */
+type Cmp = "dod" | "wow" | "mom" | "yoy";
+const CMP_NAME: Record<Cmp, string> = { dod: "DoD", wow: "WoW", mom: "vs last month", yoy: "YoY" };
+const CMP_LABEL: Record<"weekly" | "daily", Partial<Record<Cmp, string>>> = {
+  weekly: { wow: "change vs the same days of the week before (WoW)", yoy: "change vs the same week last year, 52 weeks earlier (YoY)" },
+  daily: {
+    dod: "change vs the day before (DoD)", wow: "change vs the same weekday last week (WoW)",
+    mom: "change vs the same date last month (MoM)", yoy: "change vs the same date last year (YoY)",
+  },
+};
+
+/** The window a period is compared with. Weekly YoY goes back 52 weeks so weeks keep starting on a Monday. */
+function compareWindow(q: Period, cmp: Cmp, grain: "weekly" | "daily") {
+  const days = (n: number) => ({ from: addDays(q.from, -n), to: addDays(q.to, -n) });
+  if (cmp === "dod") return days(1);
+  if (cmp === "wow") return days(7);
+  if (cmp === "yoy") return grain === "weekly" ? days(364) : { from: sameDayShift(q.from, -12), to: sameDayShift(q.to, -12) };
+  return { from: sameDayShift(q.from, -1), to: sameDayShift(q.to, -1) };
+}
+
 /**
- * Per period, per segmented unit, plus the same window `shift` days earlier (7 = week on week, 1 = day on day;
- * a partial week is compared with the same days of the week before). Each day counts under its own month's segment.
+ * Per period, per segmented unit, plus the comparison window of each period (see compareWindow; a partial week is
+ * compared with the same days of the earlier week). Each day counts under its own month's segment.
  */
-function aggregatePeriods(p: Payload, periods: Period[], shift: number) {
+function aggregatePeriods(p: Payload, periods: Period[], cmp: Cmp, grain: "weekly" | "daily") {
   const ix = new SegIndex(p);
   const agg = (from: string, to: string) => { const out: Agg[] = []; aggregateInto(out, p, ix, from, to); return out; };
   const per = periods.map((q) => agg(q.from, q.to));
-  const prev = periods.map((q) => agg(addDays(q.from, -shift), addDays(q.to, -shift)));
+  const prev = periods.map((q) => { const w = compareWindow(q, cmp, grain); return agg(w.from, w.to); });
   return { ix, per, prev };
 }
 
@@ -595,7 +615,8 @@ export default function Dashboard() {
   const [ranges, setRanges] = useState<Record<"weekly" | "daily", { from: string; to: string } | null>>({ weekly: null, daily: null });
   const [metric, setMetric] = useState<MetricKey>("gmv");
   // Daily trend: compare with the day before (DoD) or the same weekday last week (WoW).
-  const [dayShift, setDayShift] = useState<1 | 7>(1);
+  // Comparison per trend tab: daily = DoD / WoW / vs last month / YoY, weekly = WoW / YoY.
+  const [cmps, setCmps] = useState<{ weekly: Cmp; daily: Cmp }>({ weekly: "wow", daily: "dod" });
   const [refreshing, setRefreshing] = useState("");
 
   /** Re-read the budget (targets) without waiting for the daily refresh. */
@@ -678,10 +699,10 @@ export default function Dashboard() {
     [data, isMonthly, selMonths.join(), throughDay, basis, asOf]);
   const periods = useMemo(() => (data && !isMonthly ? trendPeriods(tab as "weekly" | "daily", from, to, asOf) : []),
     [data, isMonthly, tab, from, to, asOf]);
-  const shift = tab === "weekly" ? 7 : dayShift;
-  const cmpName = tab === "weekly" ? "WoW" : dayShift === 1 ? "DoD" : "WoW";
-  const vsLabel = tab === "weekly" ? "change vs the same days of the week before (WoW)" : dayShift === 1 ? "change vs the day before (DoD)" : "change vs the same weekday last week (WoW)";
-  const trend = useMemo(() => (data && periods.length ? aggregatePeriods(data, periods, shift) : null), [data, periods, shift]);
+  const cmp = cmps[trendTab];
+  const cmpName = CMP_NAME[cmp];
+  const vsLabel = CMP_LABEL[trendTab][cmp] ?? "";
+  const trend = useMemo(() => (data && periods.length ? aggregatePeriods(data, periods, cmp, trendTab) : null), [data, periods, cmp, trendTab]);
 
   // Segmented units seen in the current view (filters and tables are built from them).
   const meta: UnitMeta[] = mm?.ix.units ?? trend?.ix.units ?? [];
@@ -742,12 +763,15 @@ export default function Dashboard() {
               </>
             ) : (
               <>
+                <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>Compare
+                  <Seg value={cmp} onChange={(v) => setCmps({ ...cmps, [trendTab]: v })}
+                    options={(trendTab === "weekly" ? [["wow", "WoW"], ["yoy", "YoY"]] : [["dod", "DoD"], ["wow", "WoW"], ["mom", "vs last month"], ["yoy", "YoY"]]) as [Cmp, string][]} />
+                </span>
                 <DateInput label="From" value={from} min={TREND_MIN} max={to} onChange={(v) => setRange({ from: v, to })} />
                 <DateInput label="To" value={to} min={from} max={asOf} onChange={(v) => setRange({ from, to: v })} />
                 <select value={metric} onChange={(e) => setMetric(e.target.value as MetricKey)} style={control}>
                   {METRICS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
                 </select>
-                {tab === "daily" && <Seg value={String(dayShift) as "1" | "7"} onChange={(v) => setDayShift(Number(v) as 1 | 7)} options={[["1", "DoD"], ["7", "WoW"]]} />}
               </>
             )}
             <FilterBar meta={meta} filters={filters} setFilters={setFilters} />

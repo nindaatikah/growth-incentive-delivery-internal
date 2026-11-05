@@ -97,6 +97,13 @@ export const mondayOf = (s: string) => {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return fmt(d);
 };
+/** The same calendar day `months` months away (clamped: 31 Mar -> 28 Feb, 29 Feb -> 28 Feb the year after). */
+export const sameDayShift = (s: string, months: number) => {
+  const [y, m, d] = s.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + months, 1));
+  const dim = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  return fmt(new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, dim))));
+};
 export const addDays = (s: string, n: number) => {
   const d = parse(s);
   d.setUTCDate(d.getUTCDate() + n);
