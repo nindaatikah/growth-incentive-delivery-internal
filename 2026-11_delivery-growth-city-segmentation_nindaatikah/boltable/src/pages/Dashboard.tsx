@@ -360,10 +360,13 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
 // ---------- trend table (one metric, one column per period) ----------
 type Period = { key: string; label: string; from: string; to: string; partial: boolean };
 
-function TrendTable({ title, firstCol, tree, periods, perPeriod, prevPeriod, vsLabel, metric, unit, initialOpen }: {
+function TrendTable({ title, firstCol, tree, periods, perPeriod, prevPeriod, vsLabel, metric, unit, initialOpen, targets, mode, filters }: {
   title: string; firstCol: string; tree: Node; periods: Period[]; perPeriod: Agg[][]; prevPeriod: Agg[][]; vsLabel: string;
   metric: MetricKey; unit: Unit; initialOpen: string[];
+  /** Per period target (weekly "vs Target" comparison): the second line then shows actual vs target. */
+  targets?: (TargetSet | null)[]; mode: TargetMode; filters: Filters;
 }) {
+  const vsTarget = !!targets;
   const { open, toggle, expandAll, collapse } = useOpen(initialOpen);
   const rows = visibleRows(tree, open);
   return (
@@ -384,11 +387,20 @@ function TrendTable({ title, firstCol, tree, periods, perPeriod, prevPeriod, vsL
             <Label n={n} open={open} toggle={toggle} />
             {perPeriod.map((pc, i) => {
               const v = metricValue(sumIdx(pc, n.units), metric, unit);
-              const d = change(v, metricValue(sumIdx(prevPeriod[i] ?? [], n.units), metric, unit), metric, unit);
+              // Second line: the change vs the chosen comparison, or (vs Target) actual vs the week's target.
+              let d: number | null, color: string | undefined;
+              if (vsTarget) {
+                const pt = targets![i] && metricDef(metric).hasTarget ? nodeTarget(mode, n, targets![i]!, filters) : null;
+                d = change(v, targetValue(pt, metric, unit), metric, unit);
+                color = tone(d, metric, "target");
+              } else {
+                d = change(v, metricValue(sumIdx(prevPeriod[i] ?? [], n.units), metric, unit), metric, unit);
+                color = trendTone(d, metric);
+              }
               return (
                 <td key={periods[i].key} style={{ ...td, lineHeight: 1.25 }}>
                   <div>{fmtValue(v, metric, unit)}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: trendTone(d, metric) ?? "var(--color-content-secondary)" }}>{fmtDelta(d, metric, unit)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: color ?? "var(--color-content-secondary)" }}>{fmtDelta(d, metric, unit)}</div>
                 </td>
               );
             })}
@@ -545,10 +557,13 @@ function trendPeriods(grain: "weekly" | "daily", from: string, to: string, asOf:
 }
 
 /** What each period is compared with. */
-type Cmp = "dod" | "wow" | "d28" | "yoy";
-const CMP_NAME: Record<Cmp, string> = { dod: "DoD", wow: "WoW", d28: "vs 28 days ago", yoy: "YoY" };
+type Cmp = "dod" | "wow" | "d28" | "yoy" | "tgt";
+const CMP_NAME: Record<Cmp, string> = { dod: "DoD", wow: "WoW", d28: "vs 28 days ago", yoy: "YoY", tgt: "vs Target" };
 const CMP_LABEL: Record<"weekly" | "daily", Partial<Record<Cmp, string>>> = {
-  weekly: { wow: "change vs the same days of the week before (WoW)", yoy: "change vs the same week last year, 52 weeks earlier (YoY)" },
+  weekly: {
+    wow: "change vs the same days of the week before (WoW)", yoy: "change vs the same week last year, 52 weeks earlier (YoY)",
+    tgt: "actual vs the week's target (each day at its month's budget, pro-rated by day; a week in a month without budget shows –)",
+  },
   daily: {
     dod: "change vs the day before (DoD)", wow: "change vs the same weekday last week (WoW)",
     d28: "change vs the same weekday 28 days (4 weeks) earlier", yoy: "change vs the same date last year (YoY)",
@@ -561,6 +576,7 @@ function compareWindow(q: Period, cmp: Cmp, grain: "weekly" | "daily") {
   if (cmp === "dod") return days(1);
   if (cmp === "wow") return days(7);
   if (cmp === "d28") return days(28);
+  if (cmp === "tgt") return days(0); // not used: the target is the comparison
   if (cmp === "yoy") return grain === "weekly" ? days(364) : { from: sameDayShift(q.from, -12), to: sameDayShift(q.to, -12) };
   return days(1);
 }
@@ -574,7 +590,18 @@ function aggregatePeriods(p: Payload, periods: Period[], cmp: Cmp, grain: "weekl
   const agg = (from: string, to: string) => { const out: Agg[] = []; aggregateInto(out, p, ix, from, to); return out; };
   const per = periods.map((q) => agg(q.from, q.to));
   const prev = periods.map((q) => { const w = compareWindow(q, cmp, grain); return agg(w.from, w.to); });
-  return { ix, per, prev };
+  // Weekly vs-target: each day of the week counts for 1/days-in-month of the target of its own month, so a week that
+  // spans two months uses both months' budgets. No target if any month of the week has no budget yet.
+  const budgetMonths = new Set([...p.budget.map((b) => b.month), ...p.budgetCountry.map((b) => b.month), ...p.budgetSegment.map((b) => b.month)]);
+  const tgt = grain !== "weekly" || cmp !== "tgt" ? undefined : periods.map((q) => {
+    const byMonth = new Map<string, number>();
+    for (let d = q.from; d <= q.to; d = addDays(d, 1)) byMonth.set(d.slice(0, 7), (byMonth.get(d.slice(0, 7)) ?? 0) + 1);
+    if (![...byMonth.keys()].every((m) => budgetMonths.has(m))) return null;
+    const t = emptyTargets();
+    for (const [m, n] of byMonth) targetsInto(t, p, ix, m, n / daysInMonth(m));
+    return t;
+  });
+  return { ix, per, prev, tgt };
 }
 
 // ---------- filters ----------
@@ -766,7 +793,7 @@ export default function Dashboard() {
               <>
                 <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>Compare
                   <Seg value={cmp} onChange={(v) => setCmps({ ...cmps, [trendTab]: v })}
-                    options={(trendTab === "weekly" ? [["wow", "WoW"], ["yoy", "YoY"]] : [["dod", "DoD"], ["wow", "WoW"], ["d28", "vs 28 days ago"], ["yoy", "YoY"]]) as [Cmp, string][]} />
+                    options={(trendTab === "weekly" ? [["wow", "WoW"], ["yoy", "YoY"], ["tgt", "vs Target"]] : [["dod", "DoD"], ["wow", "WoW"], ["d28", "vs 28 days ago"], ["yoy", "YoY"]]) as [Cmp, string][]} />
                 </span>
                 <DateInput label="From" value={from} min={TREND_MIN} max={to} onChange={(v) => setRange({ from: v, to })} />
                 <DateInput label="To" value={to} min={from} max={asOf} onChange={(v) => setRange({ from, to: v })} />
@@ -813,8 +840,8 @@ export default function Dashboard() {
           )}
           {active.length > 0 && (tab === "weekly" || tab === "daily") && trend && (
             <>
-              <TrendTable key={`gt-${tab}`} title={`Global performance by segment · ${cmpName}`} firstCol="Segment" tree={globalSeg} periods={periods} perPeriod={trend.per} prevPeriod={trend.prev} vsLabel={vsLabel} metric={metric} unit={unit} initialOpen={["total"]} />
-              <TrendTable key={`mt-${tab}`} title={`Country / Segment / City / Cluster · ${cmpName}`} firstCol="Country / Segment / City / Cluster" tree={mainTree} periods={periods} perPeriod={trend.per} prevPeriod={trend.prev} vsLabel={vsLabel} metric={metric} unit={unit} initialOpen={["total"]} />
+              <TrendTable key={`gt-${tab}`} title={`Global performance by segment · ${cmpName}`} firstCol="Segment" tree={globalSeg} periods={periods} perPeriod={trend.per} prevPeriod={trend.prev} vsLabel={vsLabel} metric={metric} unit={unit} initialOpen={["total"]} targets={trend.tgt} filters={filters} mode="segment" />
+              <TrendTable key={`mt-${tab}`} title={`Country / Segment / City / Cluster · ${cmpName}`} firstCol="Country / Segment / City / Cluster" tree={mainTree} periods={periods} perPeriod={trend.per} prevPeriod={trend.prev} vsLabel={vsLabel} metric={metric} unit={unit} initialOpen={["total"]} targets={trend.tgt} filters={filters} mode="main" />
               <TrendChart key={`gc-${tab}`} title="Trend by segment" root={globalSeg} periods={periods} perPeriod={trend.per} metric={metric} unit={unit} defaultLines={8} />
               <TrendChart key={`mc-${tab}`} title="Trend by country" root={mainTree} periods={periods} perPeriod={trend.per} metric={metric} unit={unit} defaultLines={5} />
             </>

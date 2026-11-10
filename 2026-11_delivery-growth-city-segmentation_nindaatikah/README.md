@@ -155,3 +155,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-05: Daily trend defaults to the 1st of the ongoing month, Weekly trend to the last 12 weeks (ranges kept per tab); the page shows the error instead of a blank screen if it crashes; the server loads data from 2026-07-01.
 - 2026-11-05: Daily trend can compare with the same date last month and last year; Weekly trend gets a YoY option; history loads from 2025-07-01 for YoY.
 - 2026-11-05: Daily trend: vs 28 days ago instead of vs last month; faster loading (pre-compressed payload with ETag, empty rows dropped, day-indexed aggregation).
+- 2026-11-10: Weekly trend: Compare has a vs Target option (actual vs the week's target; each day at its month's budget, pro-rated by day).
