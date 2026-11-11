@@ -239,9 +239,9 @@ function topDriver<T extends { name: string }>(parts: T[], contribution: (p: T) 
   return { label: best.p.name, text: `${show(best.c)} (${Math.round((best.c / total) * 100)}% of the change)` };
 }
 
-function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node) {
+function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node, filters: Filters) {
   return country.children.map((c) => {
-    const cur = sumIdx(m.cur, c.units), prev = sumIdx(m.mom, c.units);
+    const cur = sumIdx(m.cur, c.units), yoy = sumIdx(m.yoy, c.units);
     const bySegment = new Map<string, number[]>(), byCity = new Map<string, { units: number[]; vcities: Set<number> }>();
     for (const u of c.units) {
       const mt = meta[u];
@@ -249,52 +249,64 @@ function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node) {
       const e = byCity.get(mt.city) ?? byCity.set(mt.city, { units: [], vcities: new Set() }).get(mt.city)!;
       e.units.push(u); e.vcities.add(mt.vcity);
     }
-    const segs = [...bySegment].map(([name, units]) => ({ name, a: sumIdx(m.cur, units), b: sumIdx(m.mom, units) }));
+    const cityTarget = (vcities: Iterable<number>) => [...vcities].reduce((acc, vc) => { const x = m.tgt.city[vc]; if (x) addAgg(acc, x); return acc; }, emptyAgg());
+    const segs = [...bySegment].map(([name, units]) => ({
+      name, a: sumIdx(m.cur, units), y: sumIdx(m.yoy, units), t: cityTarget(new Set(units.map((u) => meta[u].vcity))),
+    }));
+    const tgt = nodeTarget("country", c, m.tgt, filters);
+    const gmvTarget = tgt && tgt.has.has("gmv") && tgt.agg.gmv > 0 ? tgt.agg.gmv : null;
+    const boltTarget = targetValue(tgt, "bolt", "pct");
 
-    // GMV: change in EUR and which segment drove it.
-    const gmvChange = prev.gmv > 0 ? cur.gmv / prev.gmv - 1 : null;
-    const gmvDriver = topDriver(segs, (x) => x.a.gmv - x.b.gmv, cur.gmv - prev.gmv, eurSigned);
+    // GMV vs last year, and the segment that drove it.
+    const gmvYoy = yoy.gmv > 0 ? cur.gmv / yoy.gmv - 1 : null;
+    const gmvYoyDriver = topDriver(segs, (x) => x.a.gmv - x.y.gmv, cur.gmv - yoy.gmv, eurSigned);
+    // GMV vs target (country target), driven by the segment with the biggest gap to its cities' targets.
+    const gmvGap = gmvTarget != null ? cur.gmv - gmvTarget : null;
+    const gmvTgtDriver = gmvGap == null ? null : topDriver(segs.filter((x) => x.t.gmv > 0), (x) => x.a.gmv - x.t.gmv, gmvGap, eurSigned);
+
     // Bolt spend as % of the country's GMV: each segment's contribution to the change in the country's rate.
     const rate = (a: Agg, gmv: number) => (gmv > 0 ? a.bolt / gmv : 0);
-    const boltNow = cur.gmv > 0 ? cur.bolt / cur.gmv : null, boltPrev = prev.gmv > 0 ? prev.bolt / prev.gmv : null;
-    const boltPp = boltNow != null && boltPrev != null ? (boltNow - boltPrev) * 100 : null;
-    const spendDriver = boltPp == null ? null
-      : topDriver(segs, (x) => (rate(x.a, cur.gmv) - rate(x.b, prev.gmv)) * 100, boltPp, ppSigned);
+    const boltNow = cur.gmv > 0 ? cur.bolt / cur.gmv : null, boltYoy = yoy.gmv > 0 ? yoy.bolt / yoy.gmv : null;
+    const boltYoyPp = boltNow != null && boltYoy != null ? (boltNow - boltYoy) * 100 : null;
+    const boltYoyDriver = boltYoyPp == null ? null : topDriver(segs, (x) => (rate(x.a, cur.gmv) - rate(x.y, yoy.gmv)) * 100, boltYoyPp, ppSigned);
+    // vs target: segments have no Bolt spend target of their own, so each is measured against the country's target rate
+    // on its own GMV; the parts add up to the country's gap in pp.
+    const boltTgtPp = boltNow != null && boltTarget != null ? (boltNow - boltTarget) * 100 : null;
+    const boltTgtDriver = boltTgtPp == null || boltTarget == null ? null
+      : topDriver(segs, (x) => ((x.a.bolt - boltTarget * x.a.gmv) / cur.gmv) * 100, boltTgtPp, ppSigned);
 
     // Cities furthest from their (pro-rated) targets, in EUR: GMV and ULC (activation + reactivation + engagement).
-    const cities = [...byCity].map(([name, e]) => {
-      const a = sumIdx(m.cur, e.units);
-      const t = [...e.vcities].reduce((acc, vc) => { const x = m.tgt.city[vc]; if (x) addAgg(acc, x); return acc; }, emptyAgg());
-      return { name, a, t };
-    }).filter((x) => x.t.gmv > 0);
+    const cities = [...byCity].map(([name, e]) => ({ name, a: sumIdx(m.cur, e.units), t: cityTarget(e.vcities) })).filter((x) => x.t.gmv > 0);
     const gmvOff = cities.map((x) => ({ x, gap: x.a.gmv - x.t.gmv })).sort((p, q) => Math.abs(q.gap) - Math.abs(p.gap))[0];
     const ulcOff = cities.map((x) => {
-      const act = x.a.act + x.a.react + x.a.eng, tgt = x.t.act + x.t.react + x.t.eng;
-      return { x, gap: act - tgt, pp: x.a.gmv > 0 && x.t.gmv > 0 ? (act / x.a.gmv - tgt / x.t.gmv) * 100 : null };
+      const act = x.a.act + x.a.react + x.a.eng, t = x.t.act + x.t.react + x.t.eng;
+      return { x, gap: act - t, pp: x.a.gmv > 0 && x.t.gmv > 0 ? (act / x.a.gmv - t / x.t.gmv) * 100 : null };
     }).filter((y) => y.x.t.act + y.x.t.react + y.x.t.eng > 0).sort((p, q) => Math.abs(q.gap) - Math.abs(p.gap))[0];
-    return { name: c.label, cur, gmvChange, gmvEur: cur.gmv - prev.gmv, gmvDriver, boltNow, boltPp, spendDriver, gmvOff, ulcOff };
+    return { name: c.label, cur, gmvYoy, gmvYoyEur: cur.gmv - yoy.gmv, gmvYoyDriver, gmvGap, gmvVsTarget: gmvTarget ? cur.gmv / gmvTarget - 1 : null, gmvTgtDriver,
+      boltNow, boltYoyPp, boltYoyDriver, boltTarget, boltTgtPp, boltTgtDriver, gmvOff, ulcOff };
   }).filter((r) => r.cur.gmv > 0);
 }
 
-function CountryInsights({ m, meta, country }: { m: MonthModel; meta: UnitMeta[]; country: Node }) {
-  const rows = useMemo(() => buildCountryInsights(m, meta, country).sort((a, b) => b.cur.gmv - a.cur.gmv), [m, meta, country]);
+function CountryInsights({ m, meta, country, filters }: { m: MonthModel; meta: UnitMeta[]; country: Node; filters: Filters }) {
+  const rows = useMemo(() => buildCountryInsights(m, meta, country, filters).sort((a, b) => b.cur.gmv - a.cur.gmv), [m, meta, country, filters]);
   if (!rows.length) return null;
   const dim = { color: "var(--color-content-secondary)" };
   const driver = (d: Driver) => (d ? <><b>{d.label}</b> <span style={dim}>{d.text}</span></> : <span style={dim}>–</span>);
+  const grp = (t: string) => <th colSpan={3} style={{ ...th, textAlign: "center", borderLeft: border }}>{t}</th>;
+  const sub = (t: string) => <th style={{ ...th, top: 31, borderLeft: border }}>{t}</th>;
+  const drv = <th style={{ ...th, top: 31, textAlign: "left" }} colSpan={2}>Segment driving it</th>;
+  const dcell = (d: Driver) => <td colSpan={2} style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 190 }}>{driver(d)}</td>;
   return (
     <TableShell title="Country insights: what moved and what drives it">
       <thead>
         <tr>
           <th style={{ ...th, textAlign: "left", left: 0, zIndex: 3 }} rowSpan={2}>Country</th>
-          <th colSpan={3} style={{ ...th, textAlign: "center", borderLeft: border }}>GMV vs previous month</th>
-          <th colSpan={3} style={{ ...th, textAlign: "center", borderLeft: border }}>Bolt spend (% of country GMV) vs previous month</th>
+          {grp("GMV YoY")}{grp("GMV vs target")}
+          {grp("Bolt spend (% of country GMV) YoY")}{grp("Bolt spend (% of country GMV) vs target")}
           <th colSpan={2} style={{ ...th, textAlign: "center", borderLeft: border }}>City furthest from target (EUR)</th>
         </tr>
         <tr>
-          <th style={{ ...th, top: 31, borderLeft: border }}>Change</th>
-          <th style={{ ...th, top: 31, textAlign: "left" }} colSpan={2}>Segment driving it</th>
-          <th style={{ ...th, top: 31, borderLeft: border }}>Now / change</th>
-          <th style={{ ...th, top: 31, textAlign: "left" }} colSpan={2}>Segment driving it</th>
+          {sub("Change")}{drv}{sub("vs target")}{drv}{sub("Now / change")}{drv}{sub("Now / vs target")}{drv}
           <th style={{ ...th, top: 31, textAlign: "left", borderLeft: border }}>GMV</th>
           <th style={{ ...th, top: 31, textAlign: "left" }}>ULC spend</th>
         </tr>
@@ -304,15 +316,25 @@ function CountryInsights({ m, meta, country }: { m: MonthModel; meta: UnitMeta[]
           <tr key={r.name}>
             <td style={{ ...td, textAlign: "left", fontWeight: 600, position: "sticky", left: 0, zIndex: 1, background: "var(--color-layer-floor-1)" }}>{r.name}</td>
             <td style={{ ...td, borderLeft: border, lineHeight: 1.25 }}>
-              <div style={{ fontWeight: 600, color: trendTone(r.gmvChange, "gmv") }}>{r.gmvChange == null ? "–" : fmtDelta(r.gmvChange, "gmv", "eur")}</div>
-              <div style={{ fontSize: 11, ...dim }}>{eurSigned(r.gmvEur)} · now {fmtValue(r.cur.gmv, "gmv", "eur")}</div>
+              <div style={{ fontWeight: 600, color: trendTone(r.gmvYoy, "gmv") }}>{r.gmvYoy == null ? "–" : fmtDelta(r.gmvYoy, "gmv", "eur")}</div>
+              <div style={{ fontSize: 11, ...dim }}>{eurSigned(r.gmvYoyEur)} · now {fmtValue(r.cur.gmv, "gmv", "eur")}</div>
             </td>
-            <td colSpan={2} style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 190 }}>{driver(r.gmvDriver)}</td>
+            {dcell(r.gmvYoyDriver)}
+            <td style={{ ...td, borderLeft: border, lineHeight: 1.25 }}>
+              <div style={{ fontWeight: 600, color: trendTone(r.gmvVsTarget, "gmv") }}>{r.gmvVsTarget == null ? "–" : fmtDelta(r.gmvVsTarget, "gmv", "eur")}</div>
+              <div style={{ fontSize: 11, ...dim }}>{r.gmvGap == null ? "no target" : eurSigned(r.gmvGap)}</div>
+            </td>
+            {dcell(r.gmvTgtDriver)}
             <td style={{ ...td, borderLeft: border, lineHeight: 1.25 }}>
               <div>{r.boltNow == null ? "–" : `${(r.boltNow * 100).toFixed(2)}%`}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: trendTone(r.boltPp, "bolt") }}>{r.boltPp == null ? "–" : ppSigned(r.boltPp)}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: trendTone(r.boltYoyPp, "bolt") }}>{r.boltYoyPp == null ? "–" : ppSigned(r.boltYoyPp)}</div>
             </td>
-            <td colSpan={2} style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 190 }}>{driver(r.spendDriver)}</td>
+            {dcell(r.boltYoyDriver)}
+            <td style={{ ...td, borderLeft: border, lineHeight: 1.25 }}>
+              <div>{r.boltTarget == null ? "no target" : `target ${(r.boltTarget * 100).toFixed(2)}%`}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: trendTone(r.boltTgtPp, "bolt") }}>{r.boltTgtPp == null ? "–" : ppSigned(r.boltTgtPp)}</div>
+            </td>
+            {dcell(r.boltTgtDriver)}
             <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 170, borderLeft: border, lineHeight: 1.25 }}>
               {r.gmvOff ? <><b>{r.gmvOff.x.name}</b> <span style={{ color: tone(r.gmvOff.gap / r.gmvOff.x.t.gmv, "gmv", "target") }}>{eurSigned(r.gmvOff.gap)}</span>
                 <div style={{ fontSize: 11, ...dim }}>{fmtDelta(r.gmvOff.x.a.gmv / r.gmvOff.x.t.gmv - 1, "gmv", "eur")} vs target</div></> : <span style={dim}>–</span>}
@@ -915,12 +937,14 @@ export default function Dashboard() {
           )}
           {active.length > 0 && mm && tab === "monthly" && (
             <section style={{ display: "grid", gap: 6 }}>
-              <CountryInsights m={mm.m} meta={meta} country={mainTree} />
+              <CountryInsights m={mm.m} meta={meta} country={mainTree} filters={filters} />
               <Typography className="bolt-font-body-s-regular text-secondary">
-                Change = vs the previous month on the same days (or the full month in run-rate view). The segment driving a change is the one with the
-                biggest contribution in the direction of the country's change, with its share of that change (above 100% means the other
-                segments moved the opposite way); for Bolt spend the contribution is its part of the country's % of GMV. "City furthest from target" is the city with the biggest EUR gap to its target pro-rated to the days
-                shown: GMV, and ULC spend (activation + reactivation + engagement); Bolt spend has no city target.
+                YoY = vs the same days last year (or the full month in run-rate view). vs target = vs the country's budget pro-rated to the days shown.
+                The segment driving a change is the one with the biggest contribution in the direction of the country's total, with its share of it
+                (above 100% means the other segments moved the opposite way). GMV vs target uses each segment's city targets; segments have no Bolt
+                spend target of their own, so each is measured against the country's target rate on its own GMV (the parts add up to the country's pp gap).
+                "City furthest from target" is the city with the biggest EUR gap to its target pro-rated to the days
+shown: GMV, and ULC spend (activation + reactivation + engagement); Bolt spend has no city target.
               </Typography>
             </section>
           )}

@@ -158,3 +158,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-10: Weekly trend: Compare has a vs Target option (actual vs the week's target; each day at its month's budget, pro-rated by day).
 - 2026-11-10: Country insights table on the Monthly tab: per country, GMV and Bolt spend changes with the driving segment, and the cities furthest from target.
 - 2026-11-11: the yellow status dot is a clear yellow.
+- 2026-11-11: Country insights now compare YoY and vs target (instead of vs previous month) for GMV and Bolt spend, each with the segment driving it.
