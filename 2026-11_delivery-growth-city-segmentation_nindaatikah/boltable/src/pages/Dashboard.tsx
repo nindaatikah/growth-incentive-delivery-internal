@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Typography } from "@bolteu/clay-react";
 import {
-  METRICS, PERF_METRICS, SPEND_METRICS, METRIC_DEFS, COLUMN_DEFS, Agg, Filters, Level, MetricKey, Node, Payload, SegIndex, TargetMode, TargetSet, Unit, UnitMeta,
+  addAgg, emptyAgg, METRICS, PERF_METRICS, SPEND_METRICS, METRIC_DEFS, COLUMN_DEFS, Agg, Filters, Level, MetricKey, Node, Payload, SegIndex, TargetMode, TargetSet, Unit, UnitMeta,
   activeUnits, addDays, sameDayShift, aggregateInto, buildTree, change, daysInMonth, emptyTargets, fmtDelta, fmtValue, metricDef,
   Light, STATUS_RULES, Signal, Status, rowStatus,
   metricValue, mondayOf, monthEnd, nodeTarget, noFilters, prevMonth, rawValue, SEGMENT_ORDER, shiftYear, sumIdx, targetValue, targetsInto,
@@ -131,7 +131,8 @@ const pct2 = (v: number | null) => (v == null || !isFinite(v) ? "–" : `${(v * 
 // ---------- status + insights ----------
 const LIGHT_COLOR: Record<Light, string> = {
   green: "var(--color-content-positive-primary)",
-  yellow: "var(--color-content-warning-primary, #d99a00)",
+  // A fixed bright yellow: the theme's warning colour renders as brown next to the green and red.
+  yellow: "#f5c400",
   red: "var(--color-content-danger-primary)",
 };
 const p0 = (v: number) => `${(v * 100).toFixed(0)}%`;
@@ -220,6 +221,110 @@ function Insights({ m, country, seg, filters }: { m: MonthModel; country: Node; 
         and GMV YoY (green ≥ {p(r.yoy.green)}, yellow ≥ {p(r.yoy.yellow)}, else red). Rows without a target use the checks they have. Hover a dot for the detail.
       </Typography>
     </section>
+  );
+}
+
+// ---------- country insights: what moved, which segment drives it, which city is off target ----------
+const eurSigned = (v: number) => `${v < 0 ? "-" : "+"}€${fmtValue(Math.abs(v), "gmv", "eur")}`;
+const ppSigned = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}pp`;
+
+type Driver = { label: string; text: string } | null;
+
+/** The part (segment) that contributed most to a change, in the direction of the total change. */
+function topDriver<T extends { name: string }>(parts: T[], contribution: (p: T) => number, total: number, show: (c: number) => string): Driver {
+  if (!parts.length || Math.abs(total) < 1e-9) return null;
+  const sign = total > 0 ? 1 : -1;
+  const best = parts.map((p) => ({ p, c: contribution(p) })).filter((x) => x.c * sign > 0).sort((a, b) => b.c * sign - a.c * sign)[0];
+  if (!best) return null;
+  return { label: best.p.name, text: `${show(best.c)} (${Math.round((best.c / total) * 100)}% of the change)` };
+}
+
+function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node) {
+  return country.children.map((c) => {
+    const cur = sumIdx(m.cur, c.units), prev = sumIdx(m.mom, c.units);
+    const bySegment = new Map<string, number[]>(), byCity = new Map<string, { units: number[]; vcities: Set<number> }>();
+    for (const u of c.units) {
+      const mt = meta[u];
+      (bySegment.get(mt.segment) ?? bySegment.set(mt.segment, []).get(mt.segment)!).push(u);
+      const e = byCity.get(mt.city) ?? byCity.set(mt.city, { units: [], vcities: new Set() }).get(mt.city)!;
+      e.units.push(u); e.vcities.add(mt.vcity);
+    }
+    const segs = [...bySegment].map(([name, units]) => ({ name, a: sumIdx(m.cur, units), b: sumIdx(m.mom, units) }));
+
+    // GMV: change in EUR and which segment drove it.
+    const gmvChange = prev.gmv > 0 ? cur.gmv / prev.gmv - 1 : null;
+    const gmvDriver = topDriver(segs, (x) => x.a.gmv - x.b.gmv, cur.gmv - prev.gmv, eurSigned);
+    // Bolt spend as % of the country's GMV: each segment's contribution to the change in the country's rate.
+    const rate = (a: Agg, gmv: number) => (gmv > 0 ? a.bolt / gmv : 0);
+    const boltNow = cur.gmv > 0 ? cur.bolt / cur.gmv : null, boltPrev = prev.gmv > 0 ? prev.bolt / prev.gmv : null;
+    const boltPp = boltNow != null && boltPrev != null ? (boltNow - boltPrev) * 100 : null;
+    const spendDriver = boltPp == null ? null
+      : topDriver(segs, (x) => (rate(x.a, cur.gmv) - rate(x.b, prev.gmv)) * 100, boltPp, ppSigned);
+
+    // Cities furthest from their (pro-rated) targets, in EUR: GMV and ULC (activation + reactivation + engagement).
+    const cities = [...byCity].map(([name, e]) => {
+      const a = sumIdx(m.cur, e.units);
+      const t = [...e.vcities].reduce((acc, vc) => { const x = m.tgt.city[vc]; if (x) addAgg(acc, x); return acc; }, emptyAgg());
+      return { name, a, t };
+    }).filter((x) => x.t.gmv > 0);
+    const gmvOff = cities.map((x) => ({ x, gap: x.a.gmv - x.t.gmv })).sort((p, q) => Math.abs(q.gap) - Math.abs(p.gap))[0];
+    const ulcOff = cities.map((x) => {
+      const act = x.a.act + x.a.react + x.a.eng, tgt = x.t.act + x.t.react + x.t.eng;
+      return { x, gap: act - tgt, pp: x.a.gmv > 0 && x.t.gmv > 0 ? (act / x.a.gmv - tgt / x.t.gmv) * 100 : null };
+    }).filter((y) => y.x.t.act + y.x.t.react + y.x.t.eng > 0).sort((p, q) => Math.abs(q.gap) - Math.abs(p.gap))[0];
+    return { name: c.label, cur, gmvChange, gmvEur: cur.gmv - prev.gmv, gmvDriver, boltNow, boltPp, spendDriver, gmvOff, ulcOff };
+  }).filter((r) => r.cur.gmv > 0);
+}
+
+function CountryInsights({ m, meta, country }: { m: MonthModel; meta: UnitMeta[]; country: Node }) {
+  const rows = useMemo(() => buildCountryInsights(m, meta, country).sort((a, b) => b.cur.gmv - a.cur.gmv), [m, meta, country]);
+  if (!rows.length) return null;
+  const dim = { color: "var(--color-content-secondary)" };
+  const driver = (d: Driver) => (d ? <><b>{d.label}</b> <span style={dim}>{d.text}</span></> : <span style={dim}>–</span>);
+  return (
+    <TableShell title="Country insights: what moved and what drives it">
+      <thead>
+        <tr>
+          <th style={{ ...th, textAlign: "left", left: 0, zIndex: 3 }} rowSpan={2}>Country</th>
+          <th colSpan={3} style={{ ...th, textAlign: "center", borderLeft: border }}>GMV vs previous month</th>
+          <th colSpan={3} style={{ ...th, textAlign: "center", borderLeft: border }}>Bolt spend (% of country GMV) vs previous month</th>
+          <th colSpan={2} style={{ ...th, textAlign: "center", borderLeft: border }}>City furthest from target (EUR)</th>
+        </tr>
+        <tr>
+          <th style={{ ...th, top: 31, borderLeft: border }}>Change</th>
+          <th style={{ ...th, top: 31, textAlign: "left" }} colSpan={2}>Segment driving it</th>
+          <th style={{ ...th, top: 31, borderLeft: border }}>Now / change</th>
+          <th style={{ ...th, top: 31, textAlign: "left" }} colSpan={2}>Segment driving it</th>
+          <th style={{ ...th, top: 31, textAlign: "left", borderLeft: border }}>GMV</th>
+          <th style={{ ...th, top: 31, textAlign: "left" }}>ULC spend</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.name}>
+            <td style={{ ...td, textAlign: "left", fontWeight: 600, position: "sticky", left: 0, zIndex: 1, background: "var(--color-layer-floor-1)" }}>{r.name}</td>
+            <td style={{ ...td, borderLeft: border, lineHeight: 1.25 }}>
+              <div style={{ fontWeight: 600, color: trendTone(r.gmvChange, "gmv") }}>{r.gmvChange == null ? "–" : fmtDelta(r.gmvChange, "gmv", "eur")}</div>
+              <div style={{ fontSize: 11, ...dim }}>{eurSigned(r.gmvEur)} · now {fmtValue(r.cur.gmv, "gmv", "eur")}</div>
+            </td>
+            <td colSpan={2} style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 190 }}>{driver(r.gmvDriver)}</td>
+            <td style={{ ...td, borderLeft: border, lineHeight: 1.25 }}>
+              <div>{r.boltNow == null ? "–" : `${(r.boltNow * 100).toFixed(2)}%`}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: trendTone(r.boltPp, "bolt") }}>{r.boltPp == null ? "–" : ppSigned(r.boltPp)}</div>
+            </td>
+            <td colSpan={2} style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 190 }}>{driver(r.spendDriver)}</td>
+            <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 170, borderLeft: border, lineHeight: 1.25 }}>
+              {r.gmvOff ? <><b>{r.gmvOff.x.name}</b> <span style={{ color: tone(r.gmvOff.gap / r.gmvOff.x.t.gmv, "gmv", "target") }}>{eurSigned(r.gmvOff.gap)}</span>
+                <div style={{ fontSize: 11, ...dim }}>{fmtDelta(r.gmvOff.x.a.gmv / r.gmvOff.x.t.gmv - 1, "gmv", "eur")} vs target</div></> : <span style={dim}>–</span>}
+            </td>
+            <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 170, lineHeight: 1.25 }}>
+              {r.ulcOff ? <><b>{r.ulcOff.x.name}</b> <span style={{ color: tone(r.ulcOff.gap, "ulc", "target") }}>{eurSigned(r.ulcOff.gap)}</span>
+                <div style={{ fontSize: 11, ...dim }}>{r.ulcOff.pp == null ? "" : `${ppSigned(r.ulcOff.pp)} of GMV vs target`}</div></> : <span style={dim}>–</span>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </TableShell>
   );
 }
 
@@ -807,6 +912,17 @@ export default function Dashboard() {
 
           {active.length > 0 && mm && tab === "monthly" && (
             <Insights m={mm.m} country={mainTree} seg={globalSeg} filters={filters} />
+          )}
+          {active.length > 0 && mm && tab === "monthly" && (
+            <section style={{ display: "grid", gap: 6 }}>
+              <CountryInsights m={mm.m} meta={meta} country={mainTree} />
+              <Typography className="bolt-font-body-s-regular text-secondary">
+                Change = vs the previous month on the same days (or the full month in run-rate view). The segment driving a change is the one with the
+                biggest contribution in the direction of the country's change, with its share of that change (above 100% means the other
+                segments moved the opposite way); for Bolt spend the contribution is its part of the country's % of GMV. "City furthest from target" is the city with the biggest EUR gap to its target pro-rated to the days
+                shown: GMV, and ULC spend (activation + reactivation + engagement); Bolt spend has no city target.
+              </Typography>
+            </section>
           )}
 
           <Typography className="bolt-font-body-s-regular text-secondary">

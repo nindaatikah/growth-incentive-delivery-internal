@@ -44,9 +44,11 @@ export function mockQuery(sql: string): Row[] {
   const range = to ? days(from, new Date(Date.parse(to) - 864e5).toISOString().slice(0, 10)) : days(from, "2026-11-02");
   for (const day of range) {
     cities.forEach(([country, city], i) => {
-      const gmv = (60_000 * (5 - i)) * (1 + 0.1 * Math.sin(Number(day.slice(8))));
+      // October differs from November for some cities, so MoM changes and their drivers can be tested.
+      const octFactor = day < "2026-11-01" ? ({ Tartu: 0.8, Riga: 1.2, Parnu: 1.05 } as Record<string, number>)[city] ?? 1 : 1;
+      const gmv = (60_000 * (5 - i)) * (1 + 0.1 * Math.sin(Number(day.slice(8)))) * octFactor;
       const split = city === "Tallinn" ? [["Tallinn A", 0.6], ["Tallinn B", 0.4]] as const : [["Unclustered", 1]] as const;
-      for (const [zone_cluster, w] of split) rows.push({ day, country_name: country, city_name: city, zone_cluster, gmv: String(gmv * w), bolt: String(gmv * w * 0.08), act: String(gmv * w * 0.03), react: String(gmv * w * 0.02), eng: String(gmv * w * 0.035), cp1: String(gmv * w * 0.1), cp2: String(gmv * w * 0.05), ba: String(gmv * w * 0.07), elc: String(gmv * w * 0.001), mkt: String(gmv * w * 0.003), am: String(gmv * w * 0.006), churn: String(gmv * w * 0.0004), bdm: String(gmv * w * 0.002), p1: String(gmv * w * 0.0015), plus: String(gmv * w * 0.02) });
+      for (const [zone_cluster, w] of split) rows.push({ day, country_name: country, city_name: city, zone_cluster, gmv: String(gmv * w), bolt: String(gmv * w * (day < "2026-11-01" && city === "Tallinn" ? 0.06 : 0.08)), act: String(gmv * w * 0.03), react: String(gmv * w * 0.02), eng: String(gmv * w * 0.035), cp1: String(gmv * w * 0.1), cp2: String(gmv * w * 0.05), ba: String(gmv * w * 0.07), elc: String(gmv * w * 0.001), mkt: String(gmv * w * 0.003), am: String(gmv * w * 0.006), churn: String(gmv * w * 0.0004), bdm: String(gmv * w * 0.002), p1: String(gmv * w * 0.0015), plus: String(gmv * w * 0.02) });
     });
   }
   return rows;

@@ -156,3 +156,5 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-05: Daily trend can compare with the same date last month and last year; Weekly trend gets a YoY option; history loads from 2025-07-01 for YoY.
 - 2026-11-05: Daily trend: vs 28 days ago instead of vs last month; faster loading (pre-compressed payload with ETag, empty rows dropped, day-indexed aggregation).
 - 2026-11-10: Weekly trend: Compare has a vs Target option (actual vs the week's target; each day at its month's budget, pro-rated by day).
+- 2026-11-10: Country insights table on the Monthly tab: per country, GMV and Bolt spend changes with the driving segment, and the cities furthest from target.
+- 2026-11-11: the yellow status dot is a clear yellow.
