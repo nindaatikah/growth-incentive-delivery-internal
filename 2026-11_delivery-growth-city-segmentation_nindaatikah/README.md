@@ -159,3 +159,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-10: Country insights table on the Monthly tab: per country, GMV and Bolt spend changes with the driving segment, and the cities furthest from target.
 - 2026-11-11: the yellow status dot is a clear yellow.
 - 2026-11-11: Country insights now compare YoY and vs target (instead of vs previous month) for GMV and Bolt spend, each with the segment driving it.
+- 2026-11-11: Country insights: vs-target drivers show the segment's % gap to target; the city columns list up to three cities, with the 33 big cities starred and flagged when 10%+ off target.
