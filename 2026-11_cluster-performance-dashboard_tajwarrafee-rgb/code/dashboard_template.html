@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluster performance</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@450;500&display=swap">
+<style>
+:root {
+  --bg: #f3f1eb;
+  --card: #fffdf8;
+  --ink: #1c2622;
+  --muted: #5e6b66;
+  --line: #ddd4c6;
+  --green: #0e6b52;
+  --red: #a33b32;
+  --sea: #1d4e5f;
+  --shadow: 0 10px 30px rgba(40, 32, 20, 0.06);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+button, select { font: inherit; color: inherit; }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 22px 24px 56px; }
+header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; }
+h1 { margin: 0; font-size: 30px; letter-spacing: -0.04em; font-weight: 600; }
+.eyebrow { margin: 0 0 4px; color: var(--sea); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.sub { margin: 6px 0 0; color: var(--muted); max-width: 760px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 18px 0 14px; }
+.tabs { display: flex; padding: 3px; background: #e7e1d6; border-radius: 10px; }
+.tabs button, .step, select, .reset {
+  border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 8px 12px; cursor: pointer;
+}
+.tabs button { border: 0; background: transparent; border-radius: 8px; }
+.tabs button.active { background: var(--ink); color: white; }
+.period { display: flex; align-items: center; gap: 6px; }
+.period select { min-width: 220px; }
+.step:disabled { opacity: 0.35; cursor: default; }
+.choice { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+#city { min-width: 160px; }
+.kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+.kpi .label { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.kpi .value { margin: 5px 0 4px; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 22px; letter-spacing: -0.04em; }
+.kpi .deltas { display: flex; flex-direction: column; gap: 2px; min-height: 28px; font-size: 12px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr); gap: 12px; margin-top: 12px; }
+#map { height: 680px; border-radius: 16px; border: 1px solid var(--line); background: #e7e2d8; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 12px; overflow: auto; max-height: 680px; box-shadow: var(--shadow); }
+.panel h2 { margin: 0; font-size: 22px; letter-spacing: -0.03em; }
+.panel .zone-note { margin: 4px 0 12px; color: var(--muted); font-size: 13px; }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.metric { padding: 8px 10px; background: #f7f4ee; border-radius: 8px; }
+.metric span { display: block; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.metric strong { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 15px; font-weight: 500; }
+.compare { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+.compare th { text-align: right; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.compare th:first-child, .compare td:first-child { text-align: left; }
+.compare td { text-align: right; padding: 6px 4px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.chart-wrap { height: 230px; margin-top: 8px; }
+.objective-title { margin: 16px 0 0; font-size: 14px; }
+.objective-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.warn { margin: 8px 0 0; color: #8a5a12; font-size: 12px; }
+.legend { background: rgba(255, 253, 248, 0.94); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; line-height: 1.35; color: var(--ink); }
+.legend .row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.swatch { width: 74px; height: 8px; border-radius: 99px; }
+.dots { display: flex; align-items: end; gap: 6px; height: 22px; }
+.dots i { display: block; border-radius: 50%; background: rgba(14, 107, 82, 0.75); border: 1px solid #1c2622; }
+.ranking-wrap { margin-top: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: auto; max-height: 520px; box-shadow: var(--shadow); }
+table.ranking { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ranking th { position: sticky; top: 0; background: #efeae1; text-align: right; padding: 10px 8px; cursor: pointer; white-space: nowrap; }
+.ranking th:first-child, .ranking td:first-child { text-align: left; }
+.ranking td { text-align: right; padding: 7px 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.ranking tr { cursor: pointer; }
+.ranking tr.selected { background: #e6f3ee; }
+.ranking tr.quiet { color: var(--muted); }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.leaflet-tooltip.zone-tip { background: #1c2622; color: white; border: 0; border-radius: 10px; padding: 8px 10px; box-shadow: none; }
+.leaflet-tooltip.zone-tip::before { border-top-color: #1c2622; }
+.leaflet-tooltip.cluster-label { background: transparent; border: 0; box-shadow: none; color: #1c2622; font-weight: 700; font-size: 13px; }
+.leaflet-tooltip.cluster-label::before { display: none; }
+.tip { min-width: 220px; }
+.tip b { display: block; margin-bottom: 4px; }
+.tip div { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tip .muted { color: #c9d1cd; }
+details { margin-top: 16px; color: var(--muted); }
+summary { cursor: pointer; color: var(--ink); font-weight: 600; }
+details p, details li { font-size: 14px; }
+table.defs { width: 100%; max-width: 860px; border-collapse: collapse; margin: 12px 0 16px; font-size: 14px; color: var(--ink); }
+table.defs th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 12px 6px 0; }
+table.defs td { text-align: left; padding: 8px 12px 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
+table.defs td:first-child { font-weight: 600; white-space: nowrap; width: 150px; }
+.leaflet-container { font: inherit; }
+@media (max-width: 980px) {
+  header { display: block; }
+  .kpis, .stage { grid-template-columns: 1fr; }
+  #map { height: 460px; }
+  .panel { max-height: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow" id="eyebrow">Lisbon delivery</p>
+      <h1>Cluster performance</h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+  </header>
+  <div class="controls">
+    <label class="choice">City
+      <select id="city" aria-label="City"></select>
+    </label>
+    <div class="tabs" role="tablist">
+      <button type="button" id="tab-week" data-grain="week">Weekly</button>
+      <button type="button" id="tab-month" data-grain="month">Monthly</button>
+      <button type="button" id="tab-year" data-grain="year">Yearly</button>
+    </div>
+    <div class="period">
+      <button type="button" class="step" id="prev" aria-label="Previous period">←</button>
+      <select id="period" aria-label="Period"></select>
+      <button type="button" class="step" id="next" aria-label="Next period">→</button>
+    </div>
+    <label class="choice">Bubble size
+      <select id="sizeMetric">
+        <option value="orders">Orders</option>
+        <option value="gmv">GMV</option>
+        <option value="spend">Bolt spend</option>
+        <option value="merchants">Active merchants</option>
+      </select>
+    </label>
+    <label class="choice">Color
+      <select id="colorMetric">
+        <option value="popGmv">GMV vs previous period</option>
+        <option value="yoyGmv">GMV vs year ago</option>
+        <option value="gmvShare">GMV share</option>
+        <option value="spendToGmv">Bolt spend / GMV</option>
+        <option value="orders">Orders</option>
+      </select>
+    </label>
+    <button type="button" class="reset" id="reset">Reset map</button>
+  </div>
+  <section class="kpis" id="kpis"></section>
+  <section class="stage">
+    <div id="map" role="region" aria-label="Cluster map"></div>
+    <aside class="panel" id="panel"></aside>
+  </section>
+  <div class="ranking-wrap">
+    <table class="ranking">
+      <thead>
+        <tr>
+          <th data-sort="name">Cluster</th>
+          <th data-sort="segment">Segment</th>
+          <th data-sort="orders">Orders</th>
+          <th data-sort="orderShare">Order share</th>
+          <th data-sort="gmv">GMV</th>
+          <th data-sort="gmvShare">GMV share</th>
+          <th data-sort="spend">Bolt spend</th>
+          <th data-sort="spendOfCityGmv">Spend / city GMV</th>
+          <th data-sort="spendToGmv">Spend / GMV</th>
+          <th data-sort="merchants">Merchants</th>
+          <th data-sort="popGmv">GMV vs prior</th>
+          <th data-sort="yoyGmv">GMV vs year ago</th>
+        </tr>
+      </thead>
+      <tbody id="ranking"></tbody>
+    </table>
+  </div>
+  <details>
+    <summary>Definitions and comparison rules</summary>
+    <p>These rules apply to every city in the dropdown. Delivered orders, all delivery verticals, dated by the local order-creation date. History starts 1 January 2025. Orders outside that city’s clusters are excluded. Each order is assigned to a cluster from its customer delivery zone. Bubble positions are the average delivery coordinates of that cluster and do not move between periods.</p>
+    <table class="defs">
+      <thead>
+        <tr><th>Metric</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Segment</td>
+          <td>The cluster’s role in the November 2026 capital allocation, such as Maintain Share, Non Priority, Launch, Preparation, Monetise, or Grow Share. It stays the same in every period. Blank when that cluster has no segment on the sheet.</td>
+        </tr>
+        <tr>
+          <td>Active merchants</td>
+          <td>Distinct providers with at least one delivered order in the cluster during the selected period. A merchant can serve more than one cluster, so the cluster counts do not add up to the city total.</td>
+        </tr>
+        <tr>
+          <td>GMV share</td>
+          <td>The cluster’s GMV as a percentage of that city’s GMV across its clusters in the same period.</td>
+        </tr>
+        <tr>
+          <td>Order share</td>
+          <td>The cluster’s delivered orders as a percentage of that city’s delivered orders across its clusters in the same period.</td>
+        </tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Weekly compares with the previous week and the same ISO week last year. Monthly compares with the previous month and the same month last year. The current incomplete week and month are excluded.</li>
+      <li>The yearly tab shows the full prior calendar year and the current year through the last complete week. Year-on-year for the current year uses the same dates last year, not the full prior year.</li>
+      <li>A percentage change is blank when the prior value is zero. Changes based on fewer than 30 orders in the prior period are marked unstable and drawn lighter on the map.</li>
+      <li>Bolt spend as a percentage of city GMV uses the city total across its clusters as the denominator. Spend / GMV uses the cluster’s own GMV.</li>
+      <li>Bubble area is scaled so small clusters stay visible. It ranks clusters by the selected volume metric; it is not a geographic area.</li>
+      <li>On the weekly tab, objective spend is campaign Bolt spend for orders delivered in the selected cluster. It can differ slightly from the Bolt spend card, which uses the order-level spend total.</li>
+    </ul>
+  </details>
+</div>
+<script src="dashboard_data.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const DATA = window.DASHBOARD_DATA;
+if (!DATA) {
+  document.body.innerHTML = "<p style='font-family:sans-serif;padding:24px'>The dashboard data did not load. Keep dashboard_data.js in the same folder as this file, then open the HTML in Chrome or Safari.</p>";
+  throw new Error("Missing dashboard data");
+}
+const state = {
+  city: DATA.cities.includes("Lisbon") ? "Lisbon" : DATA.cities[0],
+  grain: "week",
+  periodIndex: 0,
+  sizeMetric: "orders",
+  colorMetric: "popGmv",
+  selected: null,
+  sortKey: "orders",
+  sortDir: -1,
+  fitted: false
+};
+let map;
+let layer;
+let legend;
+let chart;
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+function parseDate(iso) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+function prettyDate(iso) {
+  if (!iso) return "";
+  return parseDate(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+function prettyRange(start, end) {
+  if (!start || !end) return "";
+  return `${prettyDate(start)}–${prettyDate(end)}`;
+}
+function num(value, digits = 0) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+function eur(value, digits = 0) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return new Intl.NumberFormat("en-IE", {
+    style: "currency", currency: "EUR",
+    minimumFractionDigits: digits, maximumFractionDigits: digits
+  }).format(value);
+}
+function signed(value, digits = 1) {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  const amount = Number(value);
+  const body = Math.abs(amount).toLocaleString("en-US", {
+    minimumFractionDigits: digits, maximumFractionDigits: digits
+  });
+  if (amount > 0) return `+${body}`;
+  if (amount < 0) return `−${body}`;
+  return body;
+}
+function changeClass(metric, value) {
+  if (value == null || Number(value) === 0 || metric === "spend") return "";
+  return Number(value) > 0 ? "pos" : "neg";
+}
+function cityData() {
+  return DATA.byCity[state.city];
+}
+function zoneMembers(name) {
+  const byCity = DATA.meta.cluster_zones[state.city];
+  if (byCity && !Array.isArray(byCity) && byCity[name]) return byCity[name];
+  const flat = DATA.meta.cluster_zones[name];
+  return Array.isArray(flat) ? flat : [];
+}
+function proposalFor(name) {
+  const byCity = (DATA.meta.proposals || {})[state.city] || {};
+  return byCity[name] || null;
+}
+function segmentText(name) {
+  const item = proposalFor(name);
+  return item && item.segment ? item.segment : "—";
+}
+function periods() {
+  return cityData().grains[state.grain].periods;
+}
+function currentPeriod() {
+  return periods()[state.periodIndex];
+}
+function allZones(period) {
+  const byName = new Map(period.zones.map((zone) => [zone.name, zone]));
+  return Object.entries(cityData().centroids).map(([name, coords]) => {
+    if (byName.has(name)) return byName.get(name);
+    const prefix = `${state.city} - `;
+    const short = name.startsWith(prefix) ? name.slice(prefix.length) : name;
+    return {
+      name, short, lat: coords[0], lng: coords[1], orders: 0, orderShare: 0, gmv: 0, gmvShare: 0,
+      spend: 0, spendOfCityGmv: 0, spendToGmv: null, merchants: 0, aov: null,
+      spendPerOrder: null, ordersPerMerchant: null, pop: null, yoy: null, empty: true
+    };
+  });
+}
+function sizeValue(zone) {
+  return ({ orders: zone.orders, gmv: zone.gmv, spend: zone.spend, merchants: zone.merchants })[state.sizeMetric] || 0;
+}
+function colorValue(zone) {
+  if (state.colorMetric === "popGmv") return zone.pop ? zone.pop.gmvPct : null;
+  if (state.colorMetric === "yoyGmv") return zone.yoy ? zone.yoy.gmvPct : null;
+  if (state.colorMetric === "gmvShare") return zone.gmvShare;
+  if (state.colorMetric === "spendToGmv") return zone.spendToGmv;
+  return zone.orders;
+}
+function colorUnstable(zone) {
+  if (state.colorMetric === "popGmv") return Boolean(zone.pop && zone.pop.unstable);
+  if (state.colorMetric === "yoyGmv") return Boolean(zone.yoy && zone.yoy.unstable);
+  return false;
+}
+function mix(start, end, amount) {
+  const parse = (hex) => [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16));
+  const a = parse(start);
+  const b = parse(end);
+  const channels = a.map((channel, index) => Math.round(channel + (b[index] - channel) * amount));
+  return `rgb(${channels.join(",")})`;
+}
+function bubbleColor(value, max, unstable) {
+  if (value == null || Number.isNaN(Number(value))) return "#c8c1b6";
+  if (state.colorMetric === "popGmv" || state.colorMetric === "yoyGmv") {
+    const damp = unstable ? 0.35 : 1;
+    const capped = Math.max(-1, Math.min(1, Number(value) / 25)) * damp;
+    return capped < 0 ? mix("#f4f1ea", "#a33b32", -capped) : mix("#f4f1ea", "#0e6b52", capped);
+  }
+  const ratio = max > 0 ? Math.max(0, Math.min(1, Number(value) / max)) : 0;
+  return mix("#d7eee6", "#0b4f3e", Math.sqrt(ratio));
+}
+function radius(value, max) {
+  if (!value || value <= 0 || !max) return 4;
+  return 5 + 32 * Math.sqrt(value / max);
+}
+function deltaLine(label, comparison, field) {
+  if (!comparison) return "";
+  const pct = signed(comparison[`${field}Pct`], 1);
+  if (!pct) return `<span>${esc(label)} —</span>`;
+  const cls = changeClass(field === "spend" ? "spend" : "gmv", comparison[`${field}Pct`]);
+  const mark = comparison.unstable ? "*" : "";
+  return `<span class="${cls}">${esc(label)} ${pct}%${mark}</span>`;
+}
+function kpiCard(label, value, popText, yoyText) {
+  return `<article class="kpi"><div class="label">${esc(label)}</div><div class="value">${value}</div><div class="deltas">${popText}${yoyText}</div></article>`;
+}
+function ratioChange(city, comparison) {
+  if (!comparison || comparison.gmvAbs == null || city.gmv == null || city.gmv === 0) return null;
+  const priorGmv = city.gmv - comparison.gmvAbs;
+  const priorSpend = city.spend - comparison.spendAbs;
+  if (!priorGmv) return null;
+  return (city.spend / city.gmv - priorSpend / priorGmv) * 100;
+}
+function renderKpis() {
+  const period = currentPeriod();
+  const city = period.city;
+  const spendRatio = city.gmv ? city.spend / city.gmv * 100 : null;
+  const line = (comparison, field, digits, suffix) => {
+    if (!comparison) return "";
+    const pct = signed(comparison[field], digits);
+    if (!pct) return "";
+    const metric = field.startsWith("spend") ? "spend" : "gmv";
+    return `<span class="${changeClass(metric, comparison[field])}">${esc(comparison.label || "Change")} ${pct}${suffix}</span>`;
+  };
+  const popRatio = ratioChange(city, city.pop);
+  const yoyRatio = ratioChange(city, city.yoy);
+  const ratioLine = (comparison, value) => {
+    if (!comparison || value == null) return "";
+    const text = signed(value, 1);
+    return `<span>${esc(comparison.label || "Change")} ${text} pp</span>`;
+  };
+  document.getElementById("kpis").innerHTML = [
+    kpiCard("Orders", num(city.orders), line(city.pop, "ordersPct", 1, "%"), line(city.yoy, "ordersPct", 1, "%")),
+    kpiCard("GMV", eur(city.gmv), line(city.pop, "gmvPct", 1, "%"), line(city.yoy, "gmvPct", 1, "%")),
+    kpiCard("Bolt spend", eur(city.spend), line(city.pop, "spendPct", 1, "%"), line(city.yoy, "spendPct", 1, "%")),
+    kpiCard("Bolt spend / GMV", spendRatio == null ? "—" : `${num(spendRatio, 1)}%`, ratioLine(city.pop, popRatio), ratioLine(city.yoy, yoyRatio)),
+    kpiCard("Active merchants", num(city.merchants), line(city.pop, "merchantsPct", 1, "%"), line(city.yoy, "merchantsPct", 1, "%"))
+  ].join("");
+}
+function comparisonCell(comparison, absField, pctField, format) {
+  if (!comparison || comparison[absField] == null) return "—";
+  const abs = format === "eur" ? eur(comparison[absField]) : num(comparison[absField]);
+  const pct = pctField ? signed(comparison[pctField], 1) : null;
+  const mark = comparison.unstable ? "*" : "";
+  const cls = changeClass(absField.includes("spend") ? "spend" : "gmv", comparison[pctField]);
+  return `<span class="${cls}">${abs}${pct ? ` (${pct}%${mark})` : mark}</span>`;
+}
+function shareCell(comparison, field) {
+  if (!comparison || comparison[field] == null) return "—";
+  const text = signed(comparison[field], 2);
+  const cls = changeClass("gmv", comparison[field]);
+  return `<span class="${cls}">${text} pp${comparison.unstable ? "*" : ""}</span>`;
+}
+function objectiveLabel(value) {
+  return String(value).replace(/_/g, " ");
+}
+function objectiveSection(period, zone) {
+  if (state.grain !== "week") return "";
+  const rows = ((cityData().objectives || {})[period.start] || {})[zone.name] || [];
+  const body = rows.length
+    ? rows.map((row) => `<tr><td>${esc(objectiveLabel(row.objective))}</td><td>${eur(row.spend)}</td><td>${num(row.share, 1)}%</td></tr>`).join("")
+    : `<tr><td colspan="3">No objective spend in this cluster for this week.</td></tr>`;
+  return `<h3 class="objective-title">Objective spend</h3>
+    <table class="compare">
+      <thead><tr><th>Spend objective</th><th>Bolt spend</th><th>Share</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p class="objective-note">Campaign Bolt spend on orders delivered in this cluster. The total can differ slightly from the Bolt spend card.</p>`;
+}
+function zoneSeries(name) {
+  return periods().map((period) => {
+    const zone = period.zones.find((item) => item.name === name);
+    return {
+      label: period.label,
+      start: period.start,
+      orders: zone ? zone.orders : 0,
+      gmv: zone ? zone.gmv : 0
+    };
+  });
+}
+function renderPanel() {
+  const period = currentPeriod();
+  const zones = allZones(period);
+  const zone = zones.find((item) => item.name === state.selected) || zones.slice().sort((a, b) => b.orders - a.orders)[0];
+  state.selected = zone.name;
+  if (chart) {
+    chart.destroy();
+    chart = null;
+  }
+  const unstable = (zone.pop && zone.pop.unstable) || (zone.yoy && zone.yoy.unstable);
+  const basis = [
+    zone.pop ? `${zone.pop.label || "Prior"} ${prettyRange(zone.pop.start, zone.pop.end)}` : "",
+    zone.yoy ? `${zone.yoy.label || "Year ago"} ${prettyRange(zone.yoy.start, zone.yoy.end)}` : ""
+  ].filter(Boolean).join(" · ");
+  document.getElementById("panel").innerHTML = `
+    <h2>${esc(zone.name)}</h2>
+    <p class="zone-note">${esc(zoneMembers(zone.name).join(", "))}</p>
+    <p class="zone-note">${zone.empty ? "No delivered orders in this period." : esc(period.label)}${basis ? `<br>${esc(basis)}` : ""}</p>
+    <div class="metrics">
+      <div class="metric"><span>Segment</span><strong>${esc(segmentText(zone.name))}</strong></div>
+      <div class="metric"><span>Orders</span><strong>${num(zone.orders)} · ${num(zone.orderShare, 1)}%</strong></div>
+      <div class="metric"><span>GMV</span><strong>${eur(zone.gmv)} · ${num(zone.gmvShare, 1)}%</strong></div>
+      <div class="metric"><span>Bolt spend</span><strong>${eur(zone.spend)}</strong></div>
+      <div class="metric"><span>Spend / city GMV</span><strong>${num(zone.spendOfCityGmv, 2)}%</strong></div>
+      <div class="metric"><span>Spend / cluster GMV</span><strong>${zone.spendToGmv == null ? "—" : `${num(zone.spendToGmv, 1)}%`}</strong></div>
+      <div class="metric"><span>Active merchants</span><strong>${num(zone.merchants)}</strong></div>
+      <div class="metric"><span>AOV</span><strong>${eur(zone.aov, 2)}</strong></div>
+      <div class="metric"><span>Orders / merchant</span><strong>${zone.ordersPerMerchant == null ? "—" : num(zone.ordersPerMerchant, 1)}</strong></div>
+    </div>
+    <table class="compare">
+      <thead><tr><th>Metric</th><th>Vs previous</th><th>Vs year ago</th></tr></thead>
+      <tbody>
+        <tr><td>Orders</td><td>${comparisonCell(zone.pop, "ordersAbs", "ordersPct", "num")}</td><td>${comparisonCell(zone.yoy, "ordersAbs", "ordersPct", "num")}</td></tr>
+        <tr><td>GMV</td><td>${comparisonCell(zone.pop, "gmvAbs", "gmvPct", "eur")}</td><td>${comparisonCell(zone.yoy, "gmvAbs", "gmvPct", "eur")}</td></tr>
+        <tr><td>Bolt spend</td><td>${comparisonCell(zone.pop, "spendAbs", "spendPct", "eur")}</td><td>${comparisonCell(zone.yoy, "spendAbs", "spendPct", "eur")}</td></tr>
+        <tr><td>Merchants</td><td>${comparisonCell(zone.pop, "merchantsAbs", "merchantsPct", "num")}</td><td>${comparisonCell(zone.yoy, "merchantsAbs", "merchantsPct", "num")}</td></tr>
+        <tr><td>GMV share</td><td>${shareCell(zone.pop, "gmvSharePp")}</td><td>${shareCell(zone.yoy, "gmvSharePp")}</td></tr>
+        <tr><td>Order share</td><td>${shareCell(zone.pop, "orderSharePp")}</td><td>${shareCell(zone.yoy, "orderSharePp")}</td></tr>
+      </tbody>
+    </table>
+    ${unstable ? '<p class="warn">* Prior period had fewer than 30 orders, so the percentage change is unstable.</p>' : ""}
+    ${objectiveSection(period, zone)}
+    <div class="chart-wrap"><canvas id="trend"></canvas></div>`;
+  if (typeof Chart === "undefined") {
+    document.querySelector(".chart-wrap").textContent = "The trend chart did not load. Reopen this file with an internet connection.";
+    return;
+  }
+  const series = zoneSeries(zone.name);
+  const current = period.start;
+  chart = new Chart(document.getElementById("trend"), {
+    data: {
+      labels: series.map((item) => item.label),
+      datasets: [
+        {
+          type: "bar",
+          label: "Orders",
+          data: series.map((item) => item.orders),
+          backgroundColor: series.map((item) => item.start === current ? "#0e6b52" : "rgba(14,107,82,0.28)"),
+          yAxisID: "y"
+        },
+        {
+          type: "line",
+          label: "GMV",
+          data: series.map((item) => item.gmv),
+          borderColor: "#1d4e5f",
+          backgroundColor: "#1d4e5f",
+          pointRadius: series.map((item) => item.start === current ? 3 : 0),
+          tension: 0.25,
+          yAxisID: "y1"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6, maxRotation: 0 } },
+        y: { position: "left", ticks: { maxTicksLimit: 4 } },
+        y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { maxTicksLimit: 4 } }
+      }
+    }
+  });
+}
+function tooltipHtml(zone) {
+  const rows = [
+    ["Orders", `${num(zone.orders)} · ${num(zone.orderShare, 1)}%`],
+    ["GMV", `${eur(zone.gmv)} · ${num(zone.gmvShare, 1)}%`],
+    ["Bolt spend", eur(zone.spend)],
+    ["Spend / city GMV", `${num(zone.spendOfCityGmv, 2)}%`],
+    ["Spend / GMV", zone.spendToGmv == null ? "—" : `${num(zone.spendToGmv, 1)}%`],
+    ["Merchants", num(zone.merchants)],
+    ["AOV", eur(zone.aov, 2)]
+  ];
+  const changes = [
+    zone.pop ? `<div><span>${esc(zone.pop.label || "Prior")} GMV</span><span>${signed(zone.pop.gmvPct, 1) || "—"}${zone.pop.gmvPct == null ? "" : "%"}${zone.pop.unstable ? "*" : ""}</span></div>` : "",
+    zone.yoy ? `<div><span>${esc(zone.yoy.label || "Year ago")} GMV</span><span>${signed(zone.yoy.gmvPct, 1) || "—"}${zone.yoy.gmvPct == null ? "" : "%"}${zone.yoy.unstable ? "*" : ""}</span></div>` : ""
+  ].join("");
+  return `<div class="tip"><b>${esc(zone.name)}</b>${rows.map(([label, value]) => `<div><span class="muted">${esc(label)}</span><span>${esc(value)}</span></div>`).join("")}${changes}</div>`;
+}
+function renderMap() {
+  const period = currentPeriod();
+  const zones = allZones(period);
+  const maxSize = Math.max(...zones.map(sizeValue), 0);
+  const colorMax = Math.max(...zones.map((zone) => colorValue(zone) || 0), 0);
+  layer.clearLayers();
+  zones.forEach((zone) => {
+    if (zone.lat == null || zone.lng == null) return;
+    const value = colorValue(zone);
+    const unstable = colorUnstable(zone);
+    const marker = L.circleMarker([zone.lat, zone.lng], {
+      radius: radius(sizeValue(zone), maxSize),
+      color: zone.name === state.selected ? "#1c2622" : "rgba(28,38,34,0.45)",
+      weight: zone.name === state.selected ? 2.5 : 1,
+      fillColor: bubbleColor(value, colorMax, unstable),
+      fillOpacity: zone.empty ? 0.35 : (unstable ? 0.45 : 0.82)
+    });
+    marker.bindTooltip(tooltipHtml(zone), { className: "zone-tip", direction: "top", opacity: 1 });
+    const label = L.circleMarker([zone.lat, zone.lng], { radius: 0, opacity: 0, fillOpacity: 0, interactive: false });
+    label.bindTooltip(esc(zone.short), { permanent: true, direction: "center", className: "cluster-label", opacity: 1 });
+    label.addTo(layer);
+    marker.on("click", () => {
+      state.selected = zone.name;
+      render();
+    });
+    marker.addTo(layer);
+  });
+  const changeColor = state.colorMetric === "popGmv" || state.colorMetric === "yoyGmv";
+  const legendBar = changeColor
+    ? "linear-gradient(90deg,#a33b32,#f4f1ea,#0e6b52)"
+    : "linear-gradient(90deg,#d7eee6,#0b4f3e)";
+  const legendLabel = changeColor ? "−25% to +25% GMV change. Lighter bubbles had fewer than 30 prior orders." : "Lower to higher value of the selected color metric.";
+  const sizeLabel = ({ orders: "Orders", gmv: "GMV", spend: "Bolt spend", merchants: "Active merchants" })[state.sizeMetric];
+  legend.getContainer().innerHTML = `<strong>Bubble size: ${esc(sizeLabel)}</strong>
+    <div class="row"><span class="dots"><i style="width:6px;height:6px"></i><i style="width:12px;height:12px"></i><i style="width:20px;height:20px"></i></span><span>up to ${state.sizeMetric === "gmv" || state.sizeMetric === "spend" ? eur(maxSize) : num(maxSize)}</span></div>
+    <div class="row"><span class="swatch" style="background:${legendBar}"></span><span>${legendLabel}</span></div>`;
+}
+function sortValue(zone) {
+  if (state.sortKey === "name") return zone.short;
+  if (state.sortKey === "segment") return segmentText(zone.name) === "—" ? null : segmentText(zone.name);
+  if (state.sortKey === "popGmv") return zone.pop ? zone.pop.gmvPct : null;
+  if (state.sortKey === "yoyGmv") return zone.yoy ? zone.yoy.gmvPct : null;
+  return zone[state.sortKey];
+}
+function renderTable() {
+  const zones = allZones(currentPeriod()).slice().sort((a, b) => {
+    const av = sortValue(a);
+    const bv = sortValue(b);
+    const aMissing = av == null || Number.isNaN(av);
+    const bMissing = bv == null || Number.isNaN(bv);
+    if (aMissing && bMissing) return a.name.localeCompare(b.name);
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+    if (typeof av === "string") return av.localeCompare(bv) * state.sortDir;
+    return (av - bv) * state.sortDir || a.name.localeCompare(b.name);
+  });
+  document.getElementById("ranking").innerHTML = zones.map((zone) => {
+    const pop = zone.pop && zone.pop.gmvPct != null ? `<span class="${changeClass("gmv", zone.pop.gmvPct)}">${signed(zone.pop.gmvPct, 1)}%${zone.pop.unstable ? "*" : ""}</span>` : "—";
+    const yoy = zone.yoy && zone.yoy.gmvPct != null ? `<span class="${changeClass("gmv", zone.yoy.gmvPct)}">${signed(zone.yoy.gmvPct, 1)}%${zone.yoy.unstable ? "*" : ""}</span>` : "—";
+    return `<tr data-zone="${esc(zone.name)}" class="${zone.name === state.selected ? "selected" : ""} ${zone.empty ? "quiet" : ""}">
+      <td>${esc(zone.name)}</td>
+      <td>${esc(segmentText(zone.name))}</td>
+      <td>${num(zone.orders)}</td>
+      <td>${num(zone.orderShare, 1)}%</td>
+      <td>${eur(zone.gmv)}</td>
+      <td>${num(zone.gmvShare, 1)}%</td>
+      <td>${eur(zone.spend)}</td>
+      <td>${num(zone.spendOfCityGmv, 2)}%</td>
+      <td>${zone.spendToGmv == null ? "—" : `${num(zone.spendToGmv, 1)}%`}</td>
+      <td>${num(zone.merchants)}</td>
+      <td>${pop}</td>
+      <td>${yoy}</td>
+    </tr>`;
+  }).join("");
+}
+function renderControls() {
+  const citySelect = document.getElementById("city");
+  citySelect.innerHTML = DATA.cities.map((city) => `<option value="${esc(city)}">${esc(city)}</option>`).join("");
+  citySelect.value = state.city;
+  document.getElementById("eyebrow").textContent = `${state.city} delivery`;
+  document.getElementById("map").setAttribute("aria-label", `${state.city} cluster map`);
+  document.querySelectorAll(".tabs button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.grain === state.grain);
+  });
+  const select = document.getElementById("period");
+  select.innerHTML = periods().map((period, index) => `<option value="${index}">${esc(period.label)}</option>`).join("");
+  select.value = String(state.periodIndex);
+  document.getElementById("prev").disabled = state.periodIndex === 0;
+  document.getElementById("next").disabled = state.periodIndex === periods().length - 1;
+  const popOption = document.querySelector('#colorMetric option[value="popGmv"]');
+  popOption.textContent = state.grain === "week" ? "GMV week-on-week" : state.grain === "month" ? "GMV month-on-month" : "GMV vs previous period";
+  popOption.disabled = state.grain === "year";
+  document.getElementById("sizeMetric").value = state.sizeMetric;
+  document.getElementById("colorMetric").value = state.colorMetric;
+}
+function renderSubtitle() {
+  const meta = DATA.meta;
+  const grainText = {
+    week: `Complete weeks from ${prettyDate(meta.weekly_start)} through ${prettyDate(meta.weekly_end)}.`,
+    month: `Complete months from ${prettyDate(meta.monthly_start)} through ${prettyDate(meta.monthly_end)}.`,
+    year: `2025 is the full year. 2026 is year-to-date through ${prettyDate(meta.yearly_current_end)}, compared with 1 Jan–${prettyDate(meta.yearly_prior_aligned_end)}.`
+  }[state.grain];
+  document.getElementById("subtitle").textContent = `${grainText} City merchant counts are distinct across zones.`;
+}
+function ensureSelection() {
+  const zones = allZones(currentPeriod());
+  if (!zones.some((zone) => zone.name === state.selected)) {
+    zones.sort((a, b) => b.orders - a.orders);
+    state.selected = zones[0].name;
+  }
+}
+function render() {
+  ensureSelection();
+  renderControls();
+  renderSubtitle();
+  renderKpis();
+  renderPanel();
+  renderMap();
+  renderTable();
+}
+function fitMap() {
+  const coords = Object.values(cityData().centroids).filter((pair) => pair[0] != null && pair[1] != null);
+  if (coords.length) map.fitBounds(coords, { padding: [28, 28] });
+}
+function setGrain(grain) {
+  state.grain = grain;
+  state.periodIndex = periods().length - 1;
+  if (grain === "year" && state.colorMetric === "popGmv") state.colorMetric = "yoyGmv";
+  render();
+}
+function init() {
+  const meta = DATA.meta;
+  document.getElementById("subtitle").textContent = `Delivered orders from ${prettyDate(meta.history_start)}.`;
+  if (typeof L === "undefined") {
+    document.getElementById("map").textContent = "The map library did not load. Reopen this file with an internet connection.";
+    return;
+  }
+  map = L.map("map", { scrollWheelZoom: true });
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Tiles &copy; Esri"
+  }).addTo(map);
+  layer = L.layerGroup().addTo(map);
+  legend = L.control({ position: "bottomleft" });
+  legend.onAdd = () => L.DomUtil.create("div", "legend");
+  legend.addTo(map);
+  state.periodIndex = periods().length - 1;
+  document.querySelectorAll(".tabs button").forEach((button) => {
+    button.addEventListener("click", () => setGrain(button.dataset.grain));
+  });
+  document.getElementById("city").addEventListener("change", (event) => {
+    state.city = event.target.value;
+    state.periodIndex = periods().length - 1;
+    state.selected = null;
+    state.fitted = false;
+    render();
+    fitMap();
+  });
+  document.getElementById("period").addEventListener("change", (event) => {
+    state.periodIndex = Number(event.target.value);
+    render();
+  });
+  document.getElementById("prev").addEventListener("click", () => {
+    if (state.periodIndex > 0) {
+      state.periodIndex -= 1;
+      render();
+    }
+  });
+  document.getElementById("next").addEventListener("click", () => {
+    if (state.periodIndex < periods().length - 1) {
+      state.periodIndex += 1;
+      render();
+    }
+  });
+  document.getElementById("sizeMetric").addEventListener("change", (event) => {
+    state.sizeMetric = event.target.value;
+    render();
+  });
+  document.getElementById("colorMetric").addEventListener("change", (event) => {
+    state.colorMetric = event.target.value;
+    render();
+  });
+  document.getElementById("reset").addEventListener("click", fitMap);
+  document.querySelector(".ranking").addEventListener("click", (event) => {
+    const header = event.target.closest("th[data-sort]");
+    if (header) {
+      const key = header.dataset.sort;
+      state.sortDir = state.sortKey === key ? state.sortDir * -1 : (key === "name" ? 1 : -1);
+      state.sortKey = key;
+      renderTable();
+      return;
+    }
+    const row = event.target.closest("tr[data-zone]");
+    if (!row) return;
+    state.selected = row.dataset.zone;
+    const coords = cityData().centroids[state.selected];
+    if (coords) map.panTo(coords);
+    render();
+  });
+  render();
+  fitMap();
+  state.fitted = true;
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+{
+  "source": "November 2026 capital allocation, Cluster tab",
+  "sheet": "https://docs.google.com/spreadsheets/d/10SEaMlh_ZuxN1pCb6IYWtLIz5_HmnvBNQ4PZ0JYX99c/edit?gid=1980248295",
+  "cities": {
+    "Algarve": {
+      "Algarve A": {
+        "segment": "Launch"
+      },
+      "Algarve B": {
+        "segment": "Launch"
+      },
+      "Algarve C": {
+        "segment": "Launch"
+      },
+      "Algarve D": {
+        "segment": "Launch"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Baku": {
+      "Baku A": {
+        "segment": "Preparation"
+      },
+      "Baku B": {
+        "segment": "Preparation"
+      },
+      "Baku C": {
+        "segment": "Non Priority"
+      },
+      "Baku D": {
+        "segment": "Non Priority"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Bucharest": {
+      "Bucharest A": {
+        "segment": "Maintain Share"
+      },
+      "Bucharest B": {
+        "segment": "Maintain Share"
+      },
+      "Bucharest C": {
+        "segment": "Maintain Share"
+      },
+      "Bucharest D": {
+        "segment": "Maintain Share"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Kharkiv": {
+      "Kharkiv A": {
+        "segment": "Maintain Share"
+      },
+      "Kharkiv B": {
+        "segment": "Maintain Share"
+      },
+      "Kharkiv C": {
+        "segment": "Maintain Share"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Kyiv": {
+      "Kyiv A": {
+        "segment": "Maintain Share"
+      },
+      "Kyiv B": {
+        "segment": "Maintain Share"
+      },
+      "Kyiv C": {
+        "segment": "Maintain Share"
+      },
+      "Kyiv D": {
+        "segment": "Maintain Share"
+      },
+      "Kyiv E": {
+        "segment": "Maintain Share"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Lisbon": {
+      "Lisbon A": {
+        "segment": "Maintain Share"
+      },
+      "Lisbon B": {
+        "segment": "Non Priority"
+      },
+      "Lisbon C": {
+        "segment": "Non Priority"
+      },
+      "Lisbon D": {
+        "segment": "Non Priority"
+      },
+      "Lisbon E": {
+        "segment": "Non Priority"
+      },
+      "Lisbon F": {
+        "segment": "Non Priority"
+      },
+      "Lisbon G": {
+        "segment": "Maintain Share"
+      },
+      "Lisbon H": {
+        "segment": "Non Priority"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Nairobi": {
+      "Nairobi A": {
+        "segment": "Preparation"
+      },
+      "Nairobi B": {
+        "segment": "Preparation"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Porto": {
+      "Porto A": {
+        "segment": "Non Priority"
+      },
+      "Porto B": {
+        "segment": "Non Priority"
+      },
+      "Porto C": {
+        "segment": "Non Priority"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Prague": {
+      "Prague A": {
+        "segment": "Maintain Share"
+      },
+      "Prague B": {
+        "segment": "Maintain Share"
+      },
+      "Prague C": {
+        "segment": "Maintain Share"
+      },
+      "Prague D": {
+        "segment": "Maintain Share"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Tallinn": {
+      "Tallinn A": {
+        "segment": "Monetise"
+      },
+      "Tallinn B": {
+        "segment": "Monetise"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Valletta": {
+      "Valletta A": {
+        "segment": "Monetise"
+      },
+      "Valletta B": {
+        "segment": "Grow Share"
+      },
+      "Valletta C": {
+        "segment": "Grow Share"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Vilnius": {
+      "Vilnius A": {
+        "segment": "Monetise"
+      },
+      "Vilnius B": {
+        "segment": "Monetise"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    },
+    "Warsaw": {
+      "Warsaw A": {
+        "segment": "Maintain Share"
+      },
+      "Warsaw B": {
+        "segment": "Maintain Share"
+      },
+      "Warsaw C": {
+        "segment": "Non Priority"
+      },
+      "Unclustered": {
+        "segment": null
+      }
+    }
+  }
+}
