@@ -4,8 +4,8 @@
 |---|---|
 | Owner | Tajwar Rafee / tajwarrafee-rgb |
 | Date (created / last updated) | 2026-11-12 / 2026-11-12 |
-| Status | draft |
-| Boltable page | Cluster Performance Dashboard, not published yet. Planned URL: https://cluster-performance-dashboard.boltable.eu |
+| Status | live |
+| Boltable page | Cluster Performance Dashboard, https://cluster-performance-dashboard.boltable.eu |
 | Stakeholders / requested by | Tajwar Rafee, for the growth incentive team |
 | Region / vertical | Delivery. Algarve, Baku, Bucharest, Kharkiv, Kyiv, Lisbon, Nairobi, Porto, Prague, Tallinn, Valletta, Vilnius, Warsaw |
 | Keywords | cluster performance, delivery zone cluster, zone_cluster, Lisbon A-H, orders, GMV, Bolt spend, active merchants, GMV share, order share, segment, capital allocation, Maintain Share, Non Priority, Launch, Preparation, Monetise, Grow Share, Unclustered, dim_order_delivery, dim_delivery_zone_view, weekly, monthly, yearly |
@@ -62,7 +62,7 @@ The script writes one folder per city under `data/`. Segment labels are maintain
 
 ## 7. Boltable details
 
-Not published. Planned page name: Cluster Performance Dashboard. Planned URL: https://cluster-performance-dashboard.boltable.eu. The page has a city dropdown, weekly / monthly / yearly tabs, a map, a cluster panel, and a ranking table. Access should be an SSO email allowlist for the team. Until that list is saved, anyone on the company VPN can open a published Boltable app.
+Page name: Cluster Performance Dashboard. URL: https://cluster-performance-dashboard.boltable.eu. Repo: https://github.com/boltable/cluster-performance-dashboard. The page has a city dropdown, weekly / monthly / yearly tabs, a map, a cluster panel, and a ranking table. Access should be an SSO email allowlist. Until that list is saved, anyone on the company VPN can open the page. The first viewer to add is hossein.babini@bolt.eu.
 
 ## 8. Related work
 
@@ -83,3 +83,4 @@ This folder is the cluster performance page. It was not started by extending eit
 ## 10. Changelog
 
 - 2026-11-12 tajwarrafee-rgb: First archive. Thirteen cities, week ending 8 November 2026, segment on the panel and ranking, spend proposal left out, definitions written for every city.
+- 2026-11-12 tajwarrafee-rgb: Published to https://cluster-performance-dashboard.boltable.eu.
