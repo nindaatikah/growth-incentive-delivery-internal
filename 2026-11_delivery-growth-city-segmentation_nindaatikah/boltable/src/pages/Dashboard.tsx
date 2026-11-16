@@ -277,12 +277,15 @@ function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node, fi
     const boltNow = cur.gmv > 0 ? cur.bolt / cur.gmv : null, boltYoy = yoy.gmv > 0 ? yoy.bolt / yoy.gmv : null;
     const boltYoyPp = boltNow != null && boltYoy != null ? (boltNow - boltYoy) * 100 : null;
     const boltYoyDriver = boltYoyPp == null ? null : topDriver(segs, (x) => (rate(x.a, cur.gmv) - rate(x.y, yoy.gmv)) * 100, boltYoyPp, ppSigned);
-    // vs target: segments have no Bolt spend target of their own, so each is measured against the country's target rate
-    // on its own GMV; the parts add up to the country's gap in pp.
+    // vs target: only the country has a Bolt spend target, so the driver is the spend objectives (ELC, Marketing, AM, ...) whose
+    // % of GMV is furthest from their own target, in the direction of the country's gap (the two biggest are shown).
     const boltTgtPp = boltNow != null && boltTarget != null ? (boltNow - boltTarget) * 100 : null;
-    const boltTgtDriver = boltTgtPp == null || boltTarget == null ? null
-      : topDriver(segs, (x) => ((x.a.bolt - boltTarget * x.a.gmv) / cur.gmv) * 100, boltTgtPp,
-        (_, x) => `${ppSigned((rate(x.a, x.a.gmv) - boltTarget) * 100)} vs target rate`, false);
+    const objGaps = SPEND_METRICS.map((k) => {
+      const now = metricValue(cur, k, "pct"), t = targetValue(tgt, k, "pct");
+      return now != null && t != null ? { k, now, t, pp: (now - t) * 100 } : null;
+    }).filter((x): x is { k: MetricKey; now: number; t: number; pp: number } => x != null);
+    const dir = boltTgtPp != null ? (boltTgtPp >= 0 ? 1 : -1) : 0;
+    const boltTgtObjectives = dir === 0 ? [] : objGaps.filter((x) => x.pp * dir > 0.005).sort((p, q) => q.pp * dir - p.pp * dir).slice(0, 2);
 
     // Cities furthest from their (pro-rated) targets, in EUR: GMV and ULC (activation + reactivation + engagement).
     const cities = [...byCity].map(([name, e]) => ({ name, a: sumIdx(m.cur, e.units), t: cityTarget(e.vcities) })).filter((x) => x.t.gmv > 0);
@@ -299,7 +302,7 @@ function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node, fi
         pp: x.a.gmv > 0 && x.t.gmv > 0 ? (act / x.a.gmv - t / x.t.gmv) * 100 : null };
     }).filter((y) => y.x.t.act + y.x.t.react + y.x.t.eng > 0));
     return { name: c.label, cur, gmvYoy, gmvYoyEur: cur.gmv - yoy.gmv, gmvYoyDriver, gmvGap, gmvVsTarget: gmvTarget ? cur.gmv / gmvTarget - 1 : null, gmvTgtDriver,
-      boltNow, boltYoyPp, boltYoyDriver, boltTarget, boltTgtPp, boltTgtDriver, gmvCities, ulcCities };
+      boltNow, boltYoyPp, boltYoyDriver, boltTarget, boltTgtPp, boltTgtObjectives, gmvCities, ulcCities };
   }).filter((r) => r.cur.gmv > 0);
 }
 
@@ -322,7 +325,7 @@ function CountryInsights({ m, meta, country, filters }: { m: MonthModel; meta: U
           <th colSpan={2} style={{ ...th, textAlign: "center", borderLeft: border }}>Cities to look at vs target (★ = big city)</th>
         </tr>
         <tr>
-          {sub("Change")}{drv}{sub("vs target")}{drv}{sub("Now / change")}{drv}{sub("Now / vs target")}{drv}
+          {sub("Change")}{drv}{sub("vs target")}{drv}{sub("Now / change")}{drv}{sub("Now / vs target")}<th style={{ ...th, top: 31, textAlign: "left" }} colSpan={2}>Spend objective driving it</th>
           <th style={{ ...th, top: 31, textAlign: "left", borderLeft: border }}>GMV</th>
           <th style={{ ...th, top: 31, textAlign: "left" }}>ULC spend</th>
         </tr>
@@ -350,7 +353,11 @@ function CountryInsights({ m, meta, country, filters }: { m: MonthModel; meta: U
               <div>{r.boltTarget == null ? "no target" : `target ${(r.boltTarget * 100).toFixed(2)}%`}</div>
               <div style={{ fontSize: 11, fontWeight: 600, color: trendTone(r.boltTgtPp, "bolt") }}>{r.boltTgtPp == null ? "–" : ppSigned(r.boltTgtPp)}</div>
             </td>
-            {dcell(r.boltTgtDriver)}
+            <td colSpan={2} style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 190, lineHeight: 1.3 }}>
+              {r.boltTgtObjectives.length ? r.boltTgtObjectives.map((o) => (
+                <div key={o.k}><b>{metricDef(o.k).label}</b> {ppSigned(o.pp)} <span style={dim}>({(o.now * 100).toFixed(2)}% vs target {(o.t * 100).toFixed(2)}%)</span></div>
+              )) : <span style={dim}>–</span>}
+            </td>
             <td style={{ ...td, textAlign: "left", whiteSpace: "normal", minWidth: 200, borderLeft: border, lineHeight: 1.3 }}>
               {r.gmvCities.length ? r.gmvCities.map((c) => (
                 <div key={c.x.name} style={c.dive ? { background: "var(--color-layer-floor-2)", borderRadius: 4, padding: "0 4px" } : undefined}>
@@ -962,8 +969,9 @@ export default function Dashboard() {
               <CountryInsights m={mm.m} meta={meta} country={mainTree} filters={filters} />
               <Typography className="bolt-font-body-s-regular text-secondary">
                 YoY = vs the same days last year (or the full month in run-rate view). vs target = vs the country's budget pro-rated to the days shown;
-                in the driver column it is that segment's own % gap to its target (GMV, from its cities' targets) or its pp gap to the country's target rate
-                (segments have no Bolt spend target of their own). The segment shown is the one that contributed most in the direction of the country's gap.
+                in the GMV driver column it is the segment's own % gap to its target (from its cities' targets). Bolt spend has no segment target, so there the
+                driver is the spend objective(s) (ELC, Marketing, AM, Churn, BDM 3P, 1P, Bolt Plus) furthest from their own target, as pp of the country's GMV,
+                in the direction of the country's gap (objective targets and the Bolt spend total target can differ, so they need not add up).
                 For the YoY drivers, "% of the change" is the segment's share of the country's net change (above 100% = other segments moved the opposite way).
                 Cities to look at: ★ marks the 33 big cities; a shaded row is a big city at least 10% away from its target (listed first), then the cities
                 with the biggest EUR gap. Shown for GMV and for ULC spend (activation + reactivation + engagement); Bolt spend has no city target.
