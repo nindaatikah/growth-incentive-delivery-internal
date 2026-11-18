@@ -138,3 +138,4 @@ same-day, AQI, Oaxaca, expansion-adjusted, power user, tourist, `dim_user_delive
   refresh, table names moved to `main.`, Sheet views rebuilt, validated against the Sheet. AQI, expansion-adjusted
   expected rate, OB decomposition and country contribution left out on request.
 - 2026-11-18 tajwarrafee-rgb: Published to https://activation-performance.boltable.eu with the 18 November 2026 data snapshot.
+- 2026-11-18 tajwarrafee-rgb: Fixed charts failing on Boltable (bolt-viz needs plain lists, not numpy arrays). App memory set to 1 GB in the Portal (256 MB crashed on page load).

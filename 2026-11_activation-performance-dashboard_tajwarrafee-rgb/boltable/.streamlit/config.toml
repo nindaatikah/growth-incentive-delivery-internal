@@ -8,3 +8,6 @@ font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;70
 
 [client]
 toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

@@ -3,6 +3,7 @@ plain Plotly otherwise (local runs without access to the Bolt package index)."""
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -19,7 +20,28 @@ except ImportError:
 PALETTE = ["#2A9C64", "#0C2C1C", "#F5A623", "#5B8DEF", "#D0021B", "#9B59B6", "#7F8C8D", "#16A085"]
 
 
+def _plain(values):
+    if values is None or isinstance(values, (str, int, float)):
+        return values
+    s = pd.Series(np.asarray(values))
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return s.dt.strftime("%Y-%m-%d").tolist()
+    return [None if pd.isna(v) else v for v in s.tolist()]
+
+
+def _with_plain_data(fig: go.Figure) -> go.Figure:
+    # bolt-viz tests trace data for truthiness, which fails on numpy arrays. Plotly keeps an attribute an array once
+    # it is one, so the traces are rebuilt from plain lists rather than updated.
+    out = go.Figure(layout=fig.layout)
+    for trace in fig.data:
+        spec = trace.to_plotly_json()
+        spec.update(x=_plain(trace.x), y=_plain(trace.y))
+        out.add_trace(type(trace)(spec))
+    return out
+
+
 def show(fig: go.Figure, title: str, subtitle: str, summary: str = "") -> None:
+    fig = _with_plain_data(fig)
     fig.update_layout(height=fig.layout.height or 380, hovermode="x unified")
     if HAS_BOLT_VIZ:
         finalize(fig, title=title, subtitle=subtitle)
