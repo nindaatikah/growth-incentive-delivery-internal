@@ -1,0 +1,10 @@
+[theme]
+base = "light"
+primaryColor = "#2A9C64"
+backgroundColor = "#F7FAF8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0C2C1C"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+
+[client]
+toolbarMode = "minimal"
