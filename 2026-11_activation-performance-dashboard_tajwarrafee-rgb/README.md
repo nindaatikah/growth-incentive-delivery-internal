@@ -4,8 +4,8 @@
 |---|---|
 | Owner | Tajwar Rafee / tajwarrafee-rgb |
 | Date (created / last updated) | 2026-11-18 / 2026-11-18 |
-| Status | draft |
-| Boltable page | not published yet. Planned: Activation Performance, https://activation-performance.boltable.eu |
+| Status | live (18 November 2026 snapshot until the Databricks Service Principal is set up) |
+| Boltable page | Activation Performance, https://activation-performance.boltable.eu (repo https://github.com/boltable/activation-performance) |
 | Stakeholders / requested by | Tajwar Rafee, for the growth incentive delivery team (readers of the Activation Performance Sheet) |
 | Region / vertical | Delivery (Bolt Food). Estonia, Latvia, Lithuania, Slovakia, Czech Republic, Malta, Romania, Poland, Portugal, Ukraine, Cyprus, Bulgaria, Azerbaijan, Ghana, Kenya |
 | Keywords | activation performance, activation rate, same-day activation, D0 conversion, delayed activation D1–D14, late activation D14+, new users, signups, power users, repeat orders, 2-in-7d, 2-in-30d, avg orders 30d, first-order discount, new city, counterfactual, mix impact, rate impact, country mix, marketing mix, media group, local vs tourist, dim_user_delivery, delivery_activation_ts, etl_delivery_order_monetary_metrics, Boltable, Streamlit |
@@ -104,7 +104,7 @@ streamlit run app.py
 To change the market list or start date, edit `FILTER_COUNTRIES` / `DATE_CUTOFF` in both `extract.py` and `pipeline.py`.
 
 ## 7. Boltable details
-- Page: Activation Performance, https://activation-performance.boltable.eu (repo `boltable/activation-performance`).
+- Page: Activation Performance, https://activation-performance.boltable.eu (repo https://github.com/boltable/activation-performance).
 - Tabs: Behaviour Summary (quality 8-week table, repeat-order and 30-day order charts);
   Environment Summary (activation 8-week table, country summary, counterfactual conversions YoY, mix and behaviour by
   country / city type / user type / channel); Country (per-country activation, quality, channel /
@@ -137,3 +137,4 @@ same-day, AQI, Oaxaca, expansion-adjusted, power user, tourist, `dim_user_delive
 - 2026-11-18 tajwarrafee-rgb: first version. Notebook ported to a Boltable Streamlit app with a weekly Databricks
   refresh, table names moved to `main.`, Sheet views rebuilt, validated against the Sheet. AQI, expansion-adjusted
   expected rate, OB decomposition and country contribution left out on request.
+- 2026-11-18 tajwarrafee-rgb: Published to https://activation-performance.boltable.eu with the 18 November 2026 data snapshot.
