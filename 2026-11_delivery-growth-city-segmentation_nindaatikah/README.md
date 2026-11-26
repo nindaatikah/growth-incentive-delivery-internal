@@ -161,3 +161,4 @@ Checked growth-incentive-delivery-internal on 2026-11-04 (repo was empty): nothi
 - 2026-11-11: Country insights now compare YoY and vs target (instead of vs previous month) for GMV and Bolt spend, each with the segment driving it.
 - 2026-11-11: Country insights: vs-target drivers show the segment's % gap to target; the city columns list up to three cities, with the 33 big cities starred and flagged when 10%+ off target.
 - 2026-11-16: Country insights: Bolt spend vs target now names the spend objectives driving the gap instead of a segment.
+- 2026-11-26: Spend-by-objective tables: + Cost-share Reactivation and Cost-share Engagement (Bolt spend of campaigns where the merchant also pays, provider_spend > 0) and ULC cost-share % (provider spend / (Bolt + provider spend) on activation, reactivation, engagement incl. sp_). No targets.

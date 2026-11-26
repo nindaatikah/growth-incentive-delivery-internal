@@ -50,6 +50,11 @@ s AS (
     ) THEN bolt_spend ELSE 0 END) AS am,
     SUM(CASE WHEN lower(spend_objective) = 'provider_campaign_churn_prevention' THEN bolt_spend ELSE 0 END) AS churn,
     SUM(CASE WHEN lower(spend_objective) IN ('bolt_plus_campaign', 'bolt_plus_tested', 'bolt_plus_untested') THEN bolt_spend ELSE 0 END) AS plus,
+    -- Cost-share: Bolt spend of reactivation / engagement campaigns that the merchant also pays a share of (provider_spend > 0).
+    SUM(CASE WHEN lower(spend_objective) IN ('reactivation', 'sp_reactivation') AND provider_spend > 0 THEN bolt_spend ELSE 0 END) AS csr,
+    SUM(CASE WHEN lower(spend_objective) IN ('engagement', 'sp_engagement') AND provider_spend > 0 THEN bolt_spend ELSE 0 END) AS cse,
+    -- Merchant (provider) spend on the ULC objectives: ULC cost-share % = ulcp / (ULC Bolt spend + ulcp).
+    SUM(CASE WHEN lower(spend_objective) IN ('activation', 'sp_activation', 'reactivation', 'sp_reactivation', 'engagement', 'sp_engagement') THEN provider_spend ELSE 0 END) AS ulcp,
     -- 1P (Bolt Market) objectives: Bolt spend plus provider spend.
     SUM(CASE WHEN lower(spend_objective) LIKE '%bolt_market%' THEN bolt_spend + provider_spend ELSE 0 END) AS p1
   FROM main.ng_public.etl_delivery_campaign_order_metrics
@@ -76,7 +81,10 @@ SELECT
   -- BDM 3P: AM + Marketing Bolt spend on 3P orders.
   ROUND(SUM(CASE WHEN o.is_3p THEN COALESCE(s.am, 0) + COALESCE(s.mkt, 0) ELSE 0 END), 2) AS bdm,
   ROUND(SUM(COALESCE(s.p1, 0)), 2) AS p1,
-  ROUND(SUM(COALESCE(s.plus, 0)), 2) AS plus
+  ROUND(SUM(COALESCE(s.plus, 0)), 2) AS plus,
+  ROUND(SUM(COALESCE(s.csr, 0)), 2) AS csr,
+  ROUND(SUM(COALESCE(s.cse, 0)), 2) AS cse,
+  ROUND(SUM(COALESCE(s.ulcp, 0)), 2) AS ulcp
 FROM o
 -- Spend only on delivered orders.
 LEFT JOIN s ON o.order_id = s.order_id AND o.is_delivered

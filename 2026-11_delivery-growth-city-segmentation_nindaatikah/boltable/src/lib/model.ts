@@ -1,7 +1,7 @@
 // Data model + aggregation. All dates are 'YYYY-MM-DD' strings (UTC order_created_date).
 
 /** Daily columns after [day, unit]; the server writes them in this order. */
-export const AGG_KEYS = ["gmv", "bolt", "act", "react", "eng", "cp1", "cp2", "ba", "elc", "mkt", "am", "churn", "bdm", "p1", "plus"] as const;
+export const AGG_KEYS = ["gmv", "bolt", "act", "react", "eng", "cp1", "cp2", "ba", "elc", "mkt", "am", "churn", "bdm", "p1", "plus", "csr", "cse", "ulcp"] as const;
 export type AggKey = (typeof AGG_KEYS)[number];
 export type Agg = Record<AggKey, number>;
 
@@ -25,7 +25,7 @@ export type Payload = {
 };
 
 export const emptyAgg = (): Agg => ({
-  gmv: 0, bolt: 0, act: 0, react: 0, eng: 0, cp1: 0, cp2: 0, ba: 0, elc: 0, mkt: 0, am: 0, churn: 0, bdm: 0, p1: 0, plus: 0,
+  gmv: 0, bolt: 0, act: 0, react: 0, eng: 0, cp1: 0, cp2: 0, ba: 0, elc: 0, mkt: 0, am: 0, churn: 0, bdm: 0, p1: 0, plus: 0, csr: 0, cse: 0, ulcp: 0,
 });
 export const addAgg = (a: Agg, b: Agg) => { for (const k of AGG_KEYS) a[k] += b[k]; };
 export const scaleAgg = (a: Agg, k: number): Agg => {
@@ -35,7 +35,7 @@ export const scaleAgg = (a: Agg, k: number): Agg => {
 };
 
 export type Unit = "pct" | "eur";
-export type MetricKey = AggKey | "ulc";
+export type MetricKey = AggKey | "ulc" | "ulccs";
 
 export const METRICS: { key: MetricKey; label: string; hasTarget: boolean }[] = [
   { key: "gmv", label: "GMV", hasTarget: true },
@@ -54,6 +54,9 @@ export const METRICS: { key: MetricKey; label: string; hasTarget: boolean }[] = 
   { key: "bdm", label: "BDM 3P", hasTarget: true },
   { key: "p1", label: "1P (Bolt Market)", hasTarget: true },
   { key: "plus", label: "Bolt Plus", hasTarget: true },
+  { key: "csr", label: "Cost-share Reactivation", hasTarget: false },
+  { key: "cse", label: "Cost-share Engagement", hasTarget: false },
+  { key: "ulccs", label: "ULC cost-share %", hasTarget: false },
 ];
 export const metricDef = (k: MetricKey) => METRICS.find((m) => m.key === k)!;
 /** All metrics, in table order; the monthly tables show them in two groups (ELC onwards is the spend breakdown). */
@@ -63,10 +66,12 @@ export const SPEND_METRICS: MetricKey[] = ALL_METRICS.slice(ALL_METRICS.indexOf(
 
 // ULC Bolt spend = activation + reactivation + engagement (matches the budget table).
 export const rawValue = (a: Agg, k: MetricKey): number =>
-  k === "ulc" ? a.act + a.react + a.eng : a[k];
+  k === "ulc" ? a.act + a.react + a.eng : k === "ulccs" ? NaN : a[k];
 
 /** Displayed value: GMV is always EUR; other metrics are % of GMV or EUR. */
 export function metricValue(a: Agg, k: MetricKey, unit: Unit): number | null {
+  // ULC cost-share % is the merchants' share of ULC spend, whatever the unit toggle says.
+  if (k === "ulccs") { const ulc = a.act + a.react + a.eng + a.ulcp; return ulc > 0 ? a.ulcp / ulc : null; }
   const v = rawValue(a, k);
   if (k === "gmv" || unit === "eur") return v;
   return a.gmv > 0 ? v / a.gmv : null;
@@ -75,7 +80,7 @@ export function metricValue(a: Agg, k: MetricKey, unit: Unit): number | null {
 /** Change vs a comparison value: relative % for EUR values, percentage points for ratios. */
 export function change(cur: number | null, prev: number | null, k: MetricKey, unit: Unit) {
   if (cur == null || prev == null) return null;
-  if (k === "gmv" || unit === "eur") return prev === 0 ? null : (cur - prev) / Math.abs(prev);
+  if (k === "gmv" || (unit === "eur" && k !== "ulccs")) return prev === 0 ? null : (cur - prev) / Math.abs(prev);
   return (cur - prev) * 100; // percentage points
 }
 
@@ -366,7 +371,7 @@ export const sumIdx = (per: Agg[], idx: number[]): Agg => {
 
 export const fmtValue = (v: number | null, k: MetricKey, unit: Unit) => {
   if (v == null || !isFinite(v)) return "–";
-  if (k === "gmv" || unit === "eur") {
+  if (k === "gmv" || (unit === "eur" && k !== "ulccs")) {
     const a = Math.abs(v);
     return a >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : v.toFixed(0);
   }
@@ -375,7 +380,7 @@ export const fmtValue = (v: number | null, k: MetricKey, unit: Unit) => {
 export const fmtDelta = (v: number | null, k: MetricKey, unit: Unit) => {
   if (v == null || !isFinite(v)) return "–";
   const sign = v > 0 ? "+" : "";
-  return k === "gmv" || unit === "eur" ? `${sign}${(v * 100).toFixed(1)}%` : `${sign}${v.toFixed(2)}pp`;
+  return k === "gmv" || (unit === "eur" && k !== "ulccs") ? `${sign}${(v * 100).toFixed(1)}%` : `${sign}${v.toFixed(2)}pp`;
 };
 
 /** Metric definitions, shown on the definitions section of the page (and mirrored in the README). */
@@ -397,6 +402,9 @@ export const METRIC_DEFS: { label: string; definition: string; objectives: strin
   { label: "BDM 3P", definition: "AM + Marketing Bolt spend on 3P orders (delivery_vertical store_3p_ent and store_3p_mm_smb).", objectives: "the AM and Marketing objectives above", source: "etl_delivery_campaign_order_metrics.bolt_spend, dim_order_delivery.delivery_vertical", target: "bdm_3p (country rows)" },
   { label: "1P (Bolt Market)", definition: "Bolt spend + provider spend of Bolt Market campaigns.", objectives: "any objective containing bolt_market", source: "etl_delivery_campaign_order_metrics (bolt_spend + provider_spend)", target: "store_1p (country rows)" },
   { label: "Bolt Plus", definition: "Bolt spend of Bolt Plus campaigns.", objectives: "bolt_plus_campaign, bolt_plus_tested, bolt_plus_untested", source: "etl_delivery_campaign_order_metrics.bolt_spend", target: "bolt_plus (country rows)" },
+  { label: "Cost-share Reactivation", definition: "Bolt spend of reactivation campaigns that the merchant also pays a share of (provider_spend > 0). A part of Reactivation above.", objectives: "reactivation, sp_reactivation", source: "etl_delivery_campaign_order_metrics.bolt_spend where provider_spend > 0", target: "none" },
+  { label: "Cost-share Engagement", definition: "Bolt spend of engagement campaigns that the merchant also pays a share of (provider_spend > 0). A part of Engagement above.", objectives: "engagement, sp_engagement", source: "etl_delivery_campaign_order_metrics.bolt_spend where provider_spend > 0", target: "none" },
+  { label: "ULC cost-share %", definition: "Merchant share of ULC spend = provider spend / (Bolt spend + provider spend) on the ULC objectives. Shown as the % itself (not % of GMV); changes are in pp.", objectives: "activation, reactivation, engagement (+ sp_ variants)", source: "etl_delivery_campaign_order_metrics.provider_spend and bolt_spend", target: "none" },
 ];
 
 /** What each table column means, shown under "Metric and status definitions" (and mirrored in the README). */

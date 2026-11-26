@@ -65,7 +65,7 @@ function historyEnd(now = new Date()) {
 
 // Raw query results. History (last year's months) never changes; recent is refreshed incrementally.
 // Bump when the row shape changes, so an old S3 snapshot is ignored instead of misread.
-const STATE_VERSION = 8; // 8: history window starts 2025-07-01 (YoY on the trend tabs); 7: history window starts 2026-07-01 (12-week default); 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
+const STATE_VERSION = 9; // 9: + cost-share reactivation / engagement and ULC provider spend; 8: history window starts 2025-07-01 (YoY on the trend tabs); 7: history window starts 2026-07-01 (12-week default); 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
 type State = { version: number; at: string; hist: Row[]; histTo?: string; recent: Row[]; budget: Row[]; budgetAt?: string };
 let state: State | null = null;
 let payload: unknown = null;
@@ -89,7 +89,7 @@ const num = (v: string | null | undefined) => (v == null || v === "" ? 0 : Numbe
 const opt = (v: string | null | undefined) => (v == null || v === "" || Number.isNaN(Number(v)) ? undefined : Number(v));
 
 // Daily row columns after [day, unit], in this order (the client's AGG_KEYS).
-const ROW_FIELDS = ["gmv", "bolt", "act", "react", "eng", "cp1", "cp2", "ba", "elc", "mkt", "am", "churn", "bdm", "p1", "plus"];
+const ROW_FIELDS = ["gmv", "bolt", "act", "react", "eng", "cp1", "cp2", "ba", "elc", "mkt", "am", "churn", "bdm", "p1", "plus", "csr", "cse", "ulcp"];
 // Budget ratio columns (share of GMV) -> payload keys.
 const RATIO_COLUMNS: Record<string, string> = {
   activation_spend: "act", reactivation_spend: "react", engagement_spend: "eng", total_bolt_spend: "bolt",

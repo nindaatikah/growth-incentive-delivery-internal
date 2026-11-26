@@ -120,6 +120,7 @@ function tone(v: number | null, k: MetricKey, kind: "delta" | "target"): string 
 /** Colour of a WoW / DoD change: GMV and CP up = green; spend up = red (more spend), down = green. */
 function trendTone(v: number | null, k: MetricKey): string | undefined {
   if (v == null || Math.abs(v) < 1e-9) return undefined;
+  if (k === "ulccs") return undefined; // neutral: a higher merchant share is neither good nor bad per se
   const upIsGood = k === "gmv" || k === "cp1" || k === "cp2";
   return (v > 0) === upIsGood ? "var(--color-content-positive-primary)" : "var(--color-content-danger-primary)";
 }
@@ -455,7 +456,7 @@ function MetricTable({ title, firstCol, tree, m, unit, initialOpen, metrics, mod
   const shareCols = (k: MetricKey) => (SHARE_METRICS.includes(k) ? (countryShare ? 2 : 1) : 0);
   const { open, toggle, expandAll, collapse } = useOpen(initialOpen);
   const rows = visibleRows(tree, open);
-  const valueHead = (k: MetricKey) => (k === "gmv" ? "GMV (€)" : unit === "pct" ? "% of GMV" : "€");
+  const valueHead = (k: MetricKey) => (k === "gmv" ? "GMV (€)" : k === "ulccs" ? "% of ULC" : unit === "pct" ? "% of GMV" : "€");
   return (
     <TableShell title={title} actions={<>
       <button onClick={collapse} style={linkBtn}>Collapse</button>
