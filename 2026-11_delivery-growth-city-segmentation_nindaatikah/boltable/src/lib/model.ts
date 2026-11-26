@@ -54,8 +54,8 @@ export const METRICS: { key: MetricKey; label: string; hasTarget: boolean }[] = 
   { key: "bdm", label: "BDM 3P", hasTarget: true },
   { key: "p1", label: "1P (Bolt Market)", hasTarget: true },
   { key: "plus", label: "Bolt Plus", hasTarget: true },
-  { key: "csr", label: "Cost-share Reactivation", hasTarget: false },
-  { key: "cse", label: "Cost-share Engagement", hasTarget: false },
+  { key: "csr", label: "Bolt Spend on Cost-share Reactivation", hasTarget: false },
+  { key: "cse", label: "Bolt Spend on Cost-share Engagement", hasTarget: false },
   { key: "ulccs", label: "ULC cost-share %", hasTarget: false },
 ];
 export const metricDef = (k: MetricKey) => METRICS.find((m) => m.key === k)!;
@@ -402,8 +402,8 @@ export const METRIC_DEFS: { label: string; definition: string; objectives: strin
   { label: "BDM 3P", definition: "AM + Marketing Bolt spend on 3P orders (delivery_vertical store_3p_ent and store_3p_mm_smb).", objectives: "the AM and Marketing objectives above", source: "etl_delivery_campaign_order_metrics.bolt_spend, dim_order_delivery.delivery_vertical", target: "bdm_3p (country rows)" },
   { label: "1P (Bolt Market)", definition: "Bolt spend + provider spend of Bolt Market campaigns.", objectives: "any objective containing bolt_market", source: "etl_delivery_campaign_order_metrics (bolt_spend + provider_spend)", target: "store_1p (country rows)" },
   { label: "Bolt Plus", definition: "Bolt spend of Bolt Plus campaigns.", objectives: "bolt_plus_campaign, bolt_plus_tested, bolt_plus_untested", source: "etl_delivery_campaign_order_metrics.bolt_spend", target: "bolt_plus (country rows)" },
-  { label: "Cost-share Reactivation", definition: "Bolt spend of reactivation campaigns that the merchant also pays a share of (provider_spend > 0). A part of Reactivation above.", objectives: "reactivation, sp_reactivation", source: "etl_delivery_campaign_order_metrics.bolt_spend where provider_spend > 0", target: "none" },
-  { label: "Cost-share Engagement", definition: "Bolt spend of engagement campaigns that the merchant also pays a share of (provider_spend > 0). A part of Engagement above.", objectives: "engagement, sp_engagement", source: "etl_delivery_campaign_order_metrics.bolt_spend where provider_spend > 0", target: "none" },
+  { label: "Bolt Spend on Cost-share Reactivation", definition: "Bolt spend of reactivation campaigns that the merchant also pays a share of (provider_spend > 0). A part of Reactivation above.", objectives: "reactivation, sp_reactivation", source: "etl_delivery_campaign_order_metrics.bolt_spend where provider_spend > 0", target: "none" },
+  { label: "Bolt Spend on Cost-share Engagement", definition: "Bolt spend of engagement campaigns that the merchant also pays a share of (provider_spend > 0). A part of Engagement above.", objectives: "engagement, sp_engagement", source: "etl_delivery_campaign_order_metrics.bolt_spend where provider_spend > 0", target: "none" },
   { label: "ULC cost-share %", definition: "Merchant share of ULC spend = provider spend / (Bolt spend + provider spend) on the ULC objectives. Shown as the % itself (not % of GMV); changes are in pp.", objectives: "activation, reactivation, engagement (+ sp_ variants)", source: "etl_delivery_campaign_order_metrics.provider_spend and bolt_spend", target: "none" },
 ];
 
