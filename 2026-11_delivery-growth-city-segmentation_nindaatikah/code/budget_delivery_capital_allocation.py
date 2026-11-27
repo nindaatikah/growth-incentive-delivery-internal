@@ -103,3 +103,46 @@ cond = "month IN (" + ", ".join(f"DATE'{m}'" for m in months) + ")"
 # MAGIC where  month = date('2026-11-01')
 # MAGIC and country_name = 'GLOBAL'
 # MAGIC
+
+
+# COMMAND ----------
+
+# ── 5. City segmentation tab -> dev.dev_incentives.dev_incentive_city_segment ───────────────────────
+# Same sheet as above, tab "city_segmentation" (gid 259247874). One row per city / zone cluster / month.
+SEG_GID = "259247874"
+SEG_TARGET = "dev.dev_incentives.dev_incentive_city_segment"
+SEG_KEY = ["country_name", "city_name", "city_cluster", "month"]
+
+seg_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={SEG_GID}"
+seg_raw = urllib.request.urlopen(seg_url).read().decode("utf-8")
+if seg_raw.lstrip().lower().startswith("<!doctype html") or "<html" in seg_raw[:200].lower():
+    raise RuntimeError("Google returned a sign-in page: share the sheet as 'Anyone with the link can view'")
+
+seg_pd = pd.read_csv(io.StringIO(seg_raw), dtype=str, keep_default_na=False)
+seg_pd.columns = [c.strip().replace(" ", "_").lower() for c in seg_pd.columns]
+seg_pd = seg_pd[["country_name", "city_name", "city_cluster", "month", "city_segment"]]
+for c in seg_pd.columns:
+    seg_pd[c] = seg_pd[c].str.strip()
+seg_pd = seg_pd[seg_pd["country_name"] != ""]          # drop fully empty rows
+seg_pd["month"] = pd.to_datetime(seg_pd["month"]).dt.date
+seg_pd["city_cluster"] = seg_pd["city_cluster"].mask(seg_pd["city_cluster"] == "", None)
+seg_pd["city_segment"] = seg_pd["city_segment"].mask(seg_pd["city_segment"] == "", None)
+
+seg_df = spark.createDataFrame(seg_pd).withColumn("_ingested_at", F.current_timestamp())
+assert seg_df.groupBy(*SEG_KEY).count().filter("count > 1").count() == 0, "duplicate keys in city_segmentation tab"
+print(f"Loaded {len(seg_pd)} rows for months {sorted({str(m) for m in seg_pd['month']})}")
+
+spark.sql(f"""
+CREATE TABLE IF NOT EXISTS {SEG_TARGET} (
+  country_name STRING, city_name STRING, city_cluster STRING, month DATE,
+  city_segment STRING, _ingested_at TIMESTAMP
+)
+""")
+
+# Replace every month that is in the tab (atomic, re-run safe); other months are kept as history.
+seg_months = sorted({m for m in seg_pd["month"]})
+seg_cond = "month IN (" + ", ".join(f"DATE'{m}'" for m in seg_months) + ")"
+(seg_df.write.format("delta").mode("overwrite")
+   .option("replaceWhere", seg_cond).option("mergeSchema", "true").saveAsTable(SEG_TARGET))
+
+display(spark.sql(f"SELECT month, city_segment, COUNT(*) AS rows FROM {SEG_TARGET} GROUP BY 1, 2 ORDER BY 1, 2"))

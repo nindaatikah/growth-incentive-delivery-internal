@@ -66,7 +66,7 @@ function historyEnd(now = new Date()) {
 // Raw query results. History (last year's months) never changes; recent is refreshed incrementally.
 // Bump when the row shape changes, so an old S3 snapshot is ignored instead of misread.
 const STATE_VERSION = 9; // 9: + cost-share reactivation / engagement and ULC provider spend; 8: history window starts 2025-07-01 (YoY on the trend tabs); 7: history window starts 2026-07-01 (12-week default); 6: + Bolt Plus spend; 5: + BA spend and objective spend columns; 4: local dates, CP includes failed orders (SSOT definition)
-type State = { version: number; at: string; hist: Row[]; histTo?: string; recent: Row[]; budget: Row[]; budgetAt?: string };
+type State = { version: number; at: string; hist: Row[]; histTo?: string; recent: Row[]; budget: Row[]; clusterSeg?: Row[]; budgetAt?: string };
 let state: State | null = null;
 let payload: unknown = null;
 // The payload is big. It is serialised and compressed once per refresh (not per page load) and served with an
@@ -170,11 +170,19 @@ function buildPayload(s: State) {
     .filter((b) => level(b) === "segment")
     .map((b) => ({ month: month(b), segment: (b.city_segment || b.final_segment || "").trim(), gmv: num(b.gmv_ba), ...ratios(b) }))
     .filter((b) => b.segment);
+  // Segment per (city, zone cluster, month). The sheet names clusters "Valletta — Cluster A"; the order data calls them "Valletta A".
+  const clusterSegments = (s.clusterSeg ?? [])
+    .filter((c) => c.city_name && c.city_segment && !EXCLUDED_COUNTRIES.has(c.country_name!))
+    .map((c) => ({
+      month: month(c), country: c.country_name!, city: c.city_name!,
+      cluster: (c.city_cluster ?? "").replace(/\s*[—–-]\s*Cluster\s+/i, " ").trim(),
+      segment: c.city_segment!.trim(),
+    }));
   // Make sure budget-only cities exist in the index too.
   for (const b of budgetRows) cityIdx(b.country, b.city);
 
   const asOf = rows.reduce((m, r) => (String(r[0]) > m ? String(r[0]) : m), "");
-  return { generatedAt: s.at, asOf, budgetAt: s.budgetAt ?? s.at, cities, units, rows, budget: budgetRows, budgetCountry, budgetSegment };
+  return { generatedAt: s.at, asOf, budgetAt: s.budgetAt ?? s.at, cities, units, rows, budget: budgetRows, budgetCountry, budgetSegment, clusterSegments };
 }
 
 const lastDay = (rows: Row[]) => rows.reduce((m, r) => (r.day! > m ? r.day! : m), "");
@@ -183,6 +191,16 @@ const minusDays = (day: string, n: number) => {
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 };
+
+/** Cluster segments are optional: until the load notebook has created the table, every cluster follows its city's segment. */
+async function readClusterSegments(label: string): Promise<Row[]> {
+  try {
+    return await runQuery(label, readSql("city_segment.sql"));
+  } catch (err) {
+    console.error(`${label} failed, clusters follow the city segment:`, err instanceof Error ? err.message : err);
+    return [];
+  }
+}
 
 async function load(prev: State | null): Promise<State> {
   const t0 = Date.now();
@@ -195,15 +213,16 @@ async function load(prev: State | null): Promise<State> {
   const histTo = historyEnd();
   const prevHistTo = prev ? prev.histTo ?? "2025-12-01" : HISTORY_START;
   const histFrom = prevHistTo < histTo ? prevHistTo : null;
-  const [newHist, fresh, budget] = await Promise.all([
+  const [newHist, fresh, budget, clusterSeg] = await Promise.all([
     histFrom ? runQuery(`history from ${histFrom}`, dailySql(`DATE'${histFrom}'`, `DATE'${histTo}'`)) : Promise.resolve([]),
     runQuery(`recent from ${from}`, dailySql(`DATE'${from}'`, "current_date()")),
     runQuery("budget", readSql("budget.sql")),
+    readClusterSegments("city segments"),
   ]);
   const recent = [...(prev?.recent.filter((r) => r.day! < from) ?? []), ...fresh];
   console.log(`data ${prev ? "incremental" : "full"} load done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   const hist = [...(prev?.hist ?? []), ...newHist];
-  return { version: STATE_VERSION, at: new Date().toISOString(), hist, histTo, recent, budget, budgetAt: new Date().toISOString() };
+  return { version: STATE_VERSION, at: new Date().toISOString(), hist, histTo, recent, budget, clusterSeg, budgetAt: new Date().toISOString() };
 }
 
 function refresh() {
@@ -272,8 +291,8 @@ dataRouter.get("/api/status", (_req, res) => {
 // Re-reads only the budget table (a few seconds), e.g. after the budget sheet and its load notebook were updated.
 async function reloadBudget(label: string) {
   if (!state) throw new Error("Data is still loading");
-  const budget = await runQuery(label, readSql("budget.sql"));
-  state = { ...state, budget, budgetAt: new Date().toISOString() };
+  const [budget, clusterSeg] = await Promise.all([runQuery(label, readSql("budget.sql")), readClusterSegments(`${label}: city segments`)]);
+  state = { ...state, budget, clusterSeg, budgetAt: new Date().toISOString() };
   await setPayload(buildPayload(state));
   void writeSnapshot(state);
   return budget;

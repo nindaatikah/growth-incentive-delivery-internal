@@ -22,6 +22,8 @@ export type Payload = {
   budget: ({ month: string; country: string; city: string; segment: string; gmv: number } & Ratios)[];
   budgetCountry: ({ month: string; country: string; gmv: number } & Ratios)[];
   budgetSegment: ({ month: string; segment: string; gmv: number } & Ratios)[];
+  /** Segment of a city's zone cluster in a month (cluster named as in the order data). Targets stay per city. */
+  clusterSegments?: { month: string; country: string; city: string; cluster: string; segment: string }[];
 };
 
 export const emptyAgg = (): Agg => ({
@@ -136,6 +138,36 @@ export function segmentResolver(p: Payload) {
     byMonth.get(`${month}|${cityIdx}`) ?? latest.get(cityIdx)?.segment ?? "Unmapped";
 }
 
+/**
+ * Segment of a zone cluster in a month. The city_segmentation sheet can put the clusters of one city in
+ * different segments; a cluster it does not list follows the city's only row, else the city's budget segment.
+ */
+export function clusterSegmentResolver(p: Payload, citySegment: (month: string, cityIdx: number) => string) {
+  const index = new Map(p.cities.map((c, i) => [`${c.country}|${c.city}`, i]));
+  const exact = new Map<string, string>();
+  const rowsOf = new Map<string, { cluster: string; segment: string }[]>();
+  const latest = new Map<string, { month: string; segment: string }>();
+  for (const c of p.clusterSegments ?? []) {
+    const i = index.get(`${c.country}|${c.city}`);
+    if (i === undefined) continue;
+    exact.set(`${c.month}|${i}|${c.cluster}`, c.segment);
+    (rowsOf.get(`${c.month}|${i}`) ?? rowsOf.set(`${c.month}|${i}`, []).get(`${c.month}|${i}`)!).push(c);
+    const k = `${i}|${c.cluster}`;
+    const l = latest.get(k);
+    if (!l || c.month > l.month) latest.set(k, c);
+  }
+  return (month: string, cityIdx: number, cluster: string) => {
+    const hit = exact.get(`${month}|${cityIdx}|${cluster}`);
+    if (hit) return hit;
+    const rows = rowsOf.get(`${month}|${cityIdx}`);
+    if (rows?.length === 1) return rows[0].segment;
+    // A month the sheet does not cover (e.g. last year): the cluster's latest known segment.
+    const old = latest.get(`${cityIdx}|${cluster}`);
+    if (!rows && old) return old.segment;
+    return citySegment(month, cityIdx);
+  };
+}
+
 export type UnitMeta = { unit: number; cityIdx: number; vcity: number; country: string; city: string; segment: string; cluster: string };
 
 /** Registry of segmented units / cities, filled while aggregating. */
@@ -144,9 +176,16 @@ export class SegIndex {
   private unitKeys = new Map<string, number>();
   private cityKeys = new Map<string, number>();
   private segOf: (month: string, cityIdx: number) => string;
-  constructor(private p: Payload) { this.segOf = segmentResolver(p); }
+  private clusterSegOf: (month: string, cityIdx: number, cluster: string) => string;
+  constructor(private p: Payload) {
+    this.segOf = segmentResolver(p);
+    this.clusterSegOf = clusterSegmentResolver(p, this.segOf);
+  }
 
+  /** The city's segment (budget): where its target lives. */
   segment(month: string, cityIdx: number) { return this.segOf(month, cityIdx); }
+  /** The segment a zone cluster's numbers count under. */
+  clusterSegment(month: string, cityIdx: number, cluster: string) { return this.clusterSegOf(month, cityIdx, cluster); }
 
   vcity(cityIdx: number, segment: string) {
     const k = `${cityIdx}|${segment}`;
@@ -163,15 +202,15 @@ export class SegIndex {
     return m;
   }
 
-  get(unit: number, segment: string) {
-    const k = `${unit}|${segment}`;
+  get(unit: number, segment: string, citySegment: string) {
+    const k = `${unit}|${segment}|${citySegment}`;
     let i = this.unitKeys.get(k);
     if (i === undefined) {
       const [cityIdx, cluster] = this.p.units[unit];
       const c = this.p.cities[cityIdx];
       i = this.units.length;
       this.unitKeys.set(k, i);
-      this.units.push({ unit, cityIdx, vcity: this.vcity(cityIdx, segment), country: c.country, city: c.city, segment, cluster });
+      this.units.push({ unit, cityIdx, vcity: this.vcity(cityIdx, citySegment), country: c.country, city: c.city, segment, cluster });
     }
     return i;
   }
@@ -193,7 +232,7 @@ export function aggregateInto(out: Agg[], p: Payload, ix: SegIndex, from: string
       const r = rows[i];
       const u = r[1];
       let vu = map[u];
-      if (vu === undefined) vu = map[u] = ix.get(u, ix.segment(month, p.units[u][0]));
+      if (vu === undefined) vu = map[u] = ix.get(u, ix.clusterSegment(month, p.units[u][0], p.units[u][1]), ix.segment(month, p.units[u][0]));
       const a = (out[vu] ??= emptyAgg());
       for (let j = 0; j < AGG_KEYS.length; j++) a[AGG_KEYS[j]] += (r[j + 2] as number) * k;
     }
@@ -342,8 +381,17 @@ const labelOf = (m: UnitMeta, l: Level) =>
   l === "country" ? m.country : l === "segment" ? m.segment : l === "city" ? m.city : m.cluster;
 
 export function buildTree(meta: UnitMeta[], active: number[], levels: Level[], rootLabel = "TOTAL"): Node {
+  // Targets are per city, but a city's clusters can sit in different segments. A node carries a city's target
+  // only when it holds all of that city's clusters; a segment row with half a city has no city target for it.
+  const unitsOfCity = new Map<number, number>();
+  for (const u of active) unitsOfCity.set(meta[u].vcity, (unitsOfCity.get(meta[u].vcity) ?? 0) + 1);
+  const wholeCities = (units: number[]) => {
+    const n = new Map<number, number>();
+    for (const u of units) n.set(meta[u].vcity, (n.get(meta[u].vcity) ?? 0) + 1);
+    return [...n].filter(([v, c]) => c === unitsOfCity.get(v)).map(([v]) => v);
+  };
   const make = (id: string, label: string, level: Node["level"], depth: number, units: number[], targetable: boolean): Node => {
-    const node: Node = { id, label, level, depth, children: [], units, cities: [...new Set(units.map((u) => meta[u].vcity))], targetable };
+    const node: Node = { id, label, level, depth, children: [], units, cities: wholeCities(units), targetable };
     const next = levels[depth];
     if (!next) return node;
     const groups = new Map<string, number[]>();

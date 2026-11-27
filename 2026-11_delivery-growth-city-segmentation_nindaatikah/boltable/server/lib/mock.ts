@@ -6,6 +6,7 @@ const cities: [string, string, string, string][] = [
   ["Latvia", "Jelgava", "Non Priority", "Rest Cities"],
 ];
 export function mockQuery(sql: string): Row[] {
+  if (sql.includes("dev_incentive_city_segment")) return [];
   if (sql.includes("delivery_budget_capital_allocation")) {
     const months = ["2026-10-01", "2026-11-01"];
     const ratios = (k: number) => ({
