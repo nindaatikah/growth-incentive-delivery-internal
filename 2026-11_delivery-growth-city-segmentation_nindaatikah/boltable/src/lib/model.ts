@@ -261,29 +261,89 @@ function dayIndex(p: Payload): DayIndex {
  * city rows (per segmented city), country rows (GLOBAL = total) and segment rows.
  */
 export type TargetSet = {
-  city: Agg[]; country: Map<string, Agg>; segment: Map<string, Agg>;
+  city: Agg[];
+  /** Target of a segmented unit, only for cities whose clusters sit in different segments (the city target split over its clusters). */
+  unit: Agg[]; country: Map<string, Agg>; segment: Map<string, Agg>;
   /** Metrics a country / segment row has no target for (blank budget cell), keyed "country|X" / "segment|x". A blank is not a 0 target. */
   missing: Map<string, Set<MetricKey>>;
 };
-export const emptyTargets = (): TargetSet => ({ city: [], country: new Map(), segment: new Map(), missing: new Map() });
+export const emptyTargets = (): TargetSet => ({ city: [], unit: [], country: new Map(), segment: new Map(), missing: new Map() });
 
 const RATIO_KEYS = ["act", "react", "eng", "bolt", "ba", "elc", "mkt", "am", "churn", "bdm", "p1", "plus"] as const;
 function addTarget(a: Agg, b: { gmv: number } & Ratios, share: number) {
   a.gmv += b.gmv * share;
   for (const k of RATIO_KEYS) if (b[k] !== undefined) a[k] += b[k]! * b.gmv * share;
 }
+const addTargetTo = (a: Agg, b: { gmv: number } & Ratios, share: number) => { addTarget(a, b, share); return a; };
 const getOrAdd = <K,>(m: Map<K, Agg>, k: K) => m.get(k) ?? m.set(k, emptyAgg()).get(k)!;
 export const segKey = (s: string) => s.trim().toLowerCase();
 
-/** Add a month's targets into `t`, scaled by `share` (the part of the month elapsed, or 1). */
+const unitsOfCityCache = new WeakMap<Payload, Map<number, number[]>>();
+const unitsOfCity = (p: Payload) => {
+  let m = unitsOfCityCache.get(p);
+  if (!m) {
+    m = new Map();
+    p.units.forEach(([c], u) => (m!.get(c) ?? m!.set(c, []).get(c)!).push(u));
+    unitsOfCityCache.set(p, m);
+  }
+  return m;
+};
+
+/** GMV per (city, zone cluster) unit over the 3 full months before `month`: the historical split of a city's target. */
+const histGmvCache = new WeakMap<Payload, Map<string, Float64Array>>();
+function histGmv(p: Payload, month: string): Float64Array {
+  let byMonth = histGmvCache.get(p);
+  if (!byMonth) histGmvCache.set(p, (byMonth = new Map()));
+  let out = byMonth.get(month);
+  if (out) return out;
+  out = new Float64Array(p.units.length);
+  const [y, m] = month.split("-").map(Number);
+  const to = `${month}-01`;
+  const f = new Date(Date.UTC(y, m - 1 - 3, 1));
+  const from = `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const { rows, days, starts } = dayIndex(p);
+  let lo = 0, hi = days.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (days[mid] < from) lo = mid + 1; else hi = mid; }
+  for (let d = lo; d < days.length && days[d] < to; d++)
+    for (let i = starts[d]; i < starts[d + 1]; i++) out[rows[i][1] as number] += rows[i][2] as number;
+  byMonth.set(month, out);
+  return out;
+}
+
+/**
+ * Add a month's targets into `t`, scaled by `share` (the part of the month elapsed, or 1).
+ * Targets are per city. When a city's clusters sit in different segments (city_segmentation sheet), its GMV
+ * target is split over the clusters by their GMV share of the last 3 months, every cluster keeps the city's
+ * activation / reactivation / engagement rates, and the segment targets move with the clusters.
+ */
 export function targetsInto(t: TargetSet, p: Payload, ix: SegIndex, month: string, share: number) {
+  const moves: { from: string; to: string; a: Agg }[] = [];
   const index = new Map(p.cities.map((c, i) => [`${c.country}|${c.city}`, i]));
   for (const b of p.budget) {
     if (b.month !== month) continue;
     const i = index.get(`${b.country}|${b.city}`);
     if (i === undefined) continue;
     // City budgets only carry spend targets for activation / reactivation / engagement.
-    addTarget((t.city[ix.vcity(i, ix.segment(month, i))] ??= emptyAgg()), { gmv: b.gmv, act: b.act, react: b.react, eng: b.eng }, share);
+    const citySeg = ix.segment(month, i);
+    const units = unitsOfCity(p).get(i) ?? [];
+    const segOf = (u: number) => ix.clusterSegment(month, i, p.units[u][1]);
+    if (!units.some((u) => segOf(u) !== segOf(units[0]))) {
+      addTarget((t.city[ix.vcity(i, citySeg)] ??= emptyAgg()), { gmv: b.gmv, act: b.act, react: b.react, eng: b.eng }, share);
+      continue;
+    }
+    // Split city: spread the target over its clusters by historical GMV share.
+    const h = histGmv(p, month);
+    const total = units.reduce((a, u) => a + h[u], 0);
+    for (const u of units) {
+      const f = total > 0 ? h[u] / total : 1 / units.length;
+      if (!(f > 0)) continue;
+      const seg = segOf(u);
+      const su = ix.get(u, seg, citySeg);
+      const part = { gmv: b.gmv * f, act: b.act, react: b.react, eng: b.eng };
+      addTarget((t.unit[su] ??= emptyAgg()), part, share);
+      // The segment budget was set with the whole city in the city's budget segment: move this cluster's part.
+      if (segKey(seg) !== segKey(citySeg)) moves.push({ from: segKey(citySeg), to: segKey(seg), a: addTargetTo(emptyAgg(), part, share) });
+    }
   }
   const note = (key: string, b: { gmv: number } & Ratios) => {
     const m = t.missing.get(key) ?? t.missing.set(key, new Set()).get(key)!;
@@ -292,6 +352,16 @@ export function targetsInto(t: TargetSet, p: Payload, ix: SegIndex, month: strin
   };
   for (const b of p.budgetCountry) if (b.month === month) { addTarget(getOrAdd(t.country, b.country), b, share); note(`country|${b.country}`, b); }
   for (const b of p.budgetSegment) if (b.month === month) { addTarget(getOrAdd(t.segment, segKey(b.segment)), b, share); note(`segment|${segKey(b.segment)}`, b); }
+  // Move the split clusters' targets between segments. Spend targets the city rows do not carry (Bolt spend, ...)
+  // keep each segment's own rate on its new GMV target.
+  const own = new Map<string, Agg>();
+  const touched = (k: string) => own.get(k) ?? own.set(k, { ...getOrAdd(t.segment, k) }).get(k)!;
+  const CITY_KEYS = new Set(["gmv", "act", "react", "eng"]);
+  const shift = (k: string, a: Agg, sign: number) => {
+    const o = touched(k), seg = getOrAdd(t.segment, k);
+    for (const key of AGG_KEYS) seg[key] += sign * (CITY_KEYS.has(key) ? a[key] : o.gmv > 0 ? (o[key] / o.gmv) * a.gmv : 0);
+  };
+  for (const mv of moves) { shift(mv.from, mv.a, -1); shift(mv.to, mv.a, +1); }
 }
 
 /** Metrics a city-sum target covers; country rows cover everything, segment rows add Bolt spend. */
@@ -341,8 +411,12 @@ export function nodeTarget(mode: TargetMode, n: Node, t: TargetSet, f: Filters):
       }
     }
   }
-  if (!n.targetable) return null;
-  return { agg: sumIdx(t.city, n.cities), has: new Set(CITY_TARGET) };
+  // A split city's clusters carry their own part of the city target.
+  const split = sumIdx(t.unit, n.units);
+  if (!n.targetable) return n.level === "cluster" && split.gmv > 0 ? { agg: split, has: new Set(CITY_TARGET) } : null;
+  const agg = sumIdx(t.city, n.cities);
+  addAgg(agg, split);
+  return { agg, has: new Set(CITY_TARGET) };
 }
 
 /** Target value (ratio or EUR) for a metric on a row, or null when that row has none for it. */

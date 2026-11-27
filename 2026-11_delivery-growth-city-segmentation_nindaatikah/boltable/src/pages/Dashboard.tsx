@@ -258,17 +258,11 @@ function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node, fi
       e.units.push(u); e.vcities.add(mt.vcity);
     }
     const cityTarget = (vcities: Iterable<number>) => [...vcities].reduce((acc, vc) => { const x = m.tgt.city[vc]; if (x) addAgg(acc, x); return acc; }, emptyAgg());
-    // A city target belongs to a segment only if all of the city's clusters are in it (clusters can be split across segments).
-    const unitsOfVcity = new Map<number, number>();
-    for (const u of c.units) unitsOfVcity.set(meta[u].vcity, (unitsOfVcity.get(meta[u].vcity) ?? 0) + 1);
-    const segs = [...bySegment].map(([name, units]) => {
-      const inSeg = new Map<number, number>();
-      for (const u of units) inSeg.set(meta[u].vcity, (inSeg.get(meta[u].vcity) ?? 0) + 1);
-      const whole = [...inSeg].filter(([v, n]) => n === unitsOfVcity.get(v)).map(([v]) => v);
-      // aw: actuals of the whole cities only, so the gap to target compares like with like.
-      const aw = sumIdx(m.cur, units.filter((u) => whole.includes(meta[u].vcity)));
-      return { name, a: sumIdx(m.cur, units), aw, y: sumIdx(m.yoy, units), t: cityTarget(whole) };
-    });
+    const segs = [...bySegment].map(([name, units]) => ({
+      name, a: sumIdx(m.cur, units), y: sumIdx(m.yoy, units),
+      // City targets; a city split over segments counts the part of its target that belongs to this segment's clusters.
+      t: (() => { const x = cityTarget(new Set(units.map((u) => meta[u].vcity))); addAgg(x, sumIdx(m.tgt.unit, units)); return x; })(),
+    }));
     const tgt = nodeTarget("country", c, m.tgt, filters);
     const gmvTarget = tgt && tgt.has.has("gmv") && tgt.agg.gmv > 0 ? tgt.agg.gmv : null;
     const boltTarget = targetValue(tgt, "bolt", "pct");
@@ -278,8 +272,8 @@ function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node, fi
     const gmvYoyDriver = topDriver(segs, (x) => x.a.gmv - x.y.gmv, cur.gmv - yoy.gmv, eurSigned);
     // GMV vs target (country target), driven by the segment with the biggest gap to its cities' targets.
     const gmvGap = gmvTarget != null ? cur.gmv - gmvTarget : null;
-    const gmvTgtDriver = gmvGap == null ? null : topDriver(segs.filter((x) => x.t.gmv > 0), (x) => x.aw.gmv - x.t.gmv, gmvGap,
-      (c, x) => `${fmtDelta(x.aw.gmv / x.t.gmv - 1, "gmv", "eur")} vs target (${eurSigned(c)})`, false);
+    const gmvTgtDriver = gmvGap == null ? null : topDriver(segs.filter((x) => x.t.gmv > 0), (x) => x.a.gmv - x.t.gmv, gmvGap,
+      (c, x) => `${fmtDelta(x.a.gmv / x.t.gmv - 1, "gmv", "eur")} vs target (${eurSigned(c)})`, false);
 
     // Bolt spend as % of the country's GMV: each segment's contribution to the change in the country's rate.
     const rate = (a: Agg, gmv: number) => (gmv > 0 ? a.bolt / gmv : 0);
@@ -297,7 +291,7 @@ function buildCountryInsights(m: MonthModel, meta: UnitMeta[], country: Node, fi
     const boltTgtObjectives = dir === 0 ? [] : objGaps.filter((x) => x.pp * dir > 0.005).sort((p, q) => q.pp * dir - p.pp * dir).slice(0, 2);
 
     // Cities furthest from their (pro-rated) targets, in EUR: GMV and ULC (activation + reactivation + engagement).
-    const cities = [...byCity].map(([name, e]) => ({ name, a: sumIdx(m.cur, e.units), t: cityTarget(e.vcities) })).filter((x) => x.t.gmv > 0);
+    const cities = [...byCity].map(([name, e]) => ({ name, a: sumIdx(m.cur, e.units), t: (() => { const x = cityTarget(e.vcities); addAgg(x, sumIdx(m.tgt.unit, e.units)); return x; })() })).filter((x) => x.t.gmv > 0);
     const pick = <T extends { gap: number; pct: number | null; big: boolean }>(items: T[]) => {
       const byGap = (p: T, q: T) => Math.abs(q.gap) - Math.abs(p.gap);
       const dive = items.filter((i) => i.big && i.pct != null && Math.abs(i.pct) >= CITY_DIVE).sort(byGap);
